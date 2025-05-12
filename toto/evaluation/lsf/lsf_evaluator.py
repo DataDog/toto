@@ -110,7 +110,7 @@ class LSFEvaluator:
                 predictor.predict(
                     test_data.input,
                     num_samples=self.num_samples,
-                    use_kv_cache=self.use_kv_cache,  # TODO(Anna) - check if this can be removed while still reproducing the same results
+                    use_kv_cache=self.use_kv_cache,
                 )
             )
             evaluation = evaluate_forecasts(

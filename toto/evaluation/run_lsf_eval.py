@@ -24,7 +24,7 @@ from typing import List
 
 import numpy as np
 import pandas as pd
-import ray  # TODO(Anna) - keep using ray or just loop on all evals in main?
+import ray
 import torch
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -247,9 +247,6 @@ def main():
     summary_results = results.groupby(["checkpoint", "dataset"]).mean()
     print(tabulate(results.reset_index(), headers="keys", tablefmt="psql"))  # Table-like format
     print(tabulate(summary_results.reset_index(), headers="keys", tablefmt="psql"))  # Table-like format
-
-
-# TODO(Anna) - update requirements.txt to include ray maybe
 
 
 if __name__ == "__main__":
