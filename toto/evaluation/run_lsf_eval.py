@@ -130,17 +130,6 @@ def get_parser():
         default=True,
         help="Whether to use key-value caching during inference.",
     )  # TODO(Anna) - should this be configurable?
-
-    parser.add_argument(
-        "--use-static-scaling",
-        type=bool,
-        default=True,
-        help="Whether to use static scaling for evaluation. This is used for evaluation only. It means that we don't"
-        "recalculate the global loc and scale after the first decoding step. This should be enabled if using"
-        "a scaler that relies on global statistics, including StdMeanScaler, or the causal scalers if using stabilize_with_global=True."
-        "If use_static_scaling is disabled, then the global loc and scale will be recalculated after each decoding step. This"
-        "could lead to discrepancies between the kv cache and non-kv cache inference results.",
-    )  # TODO(Anna) - should this be configurable?
     parser.add_argument(
         "--checkpoint-path",
         type=str,
@@ -165,7 +154,6 @@ class EvalTask:
     samples_per_batch: int
     seed: int
     use_kv_cache: bool
-    use_static_scaling: bool
 
 
 def evaluate_checkpoint(task: EvalTask) -> pd.DataFrame:
@@ -197,7 +185,6 @@ def evaluate_checkpoint(task: EvalTask) -> pd.DataFrame:
         eval_stride=task.eval_stride,
         samples_per_batch=task.samples_per_batch,
         use_kv_cache=task.use_kv_cache,
-        use_static_scaling=task.use_static_scaling,
     )
 
     evalutions, _, _ = evaluator.eval(model, task.checkpoint_path)
@@ -231,7 +218,6 @@ def main():
             samples_per_batch=args.samples_per_batch,
             seed=args.seed,
             use_kv_cache=args.use_kv_cache,
-            use_static_scaling=args.use_static_scaling,
         )
         for dataset in args.datasets
         for prediction_length in args.prediction_lengths

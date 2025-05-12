@@ -61,7 +61,6 @@ class LSFEvaluator:
         eval_stride: int = 256,
         samples_per_batch: int = 30,
         use_kv_cache: bool = False,
-        use_static_scaling: bool = True,
     ):
         self.metrics = metrics
         self.datasets = datasets
@@ -74,7 +73,6 @@ class LSFEvaluator:
         self.eval_stride = eval_stride
         self.samples_per_batch = samples_per_batch
         self.use_kv_cache = use_kv_cache
-        self.use_static_scaling = use_static_scaling
 
     def eval(
         self, model: Toto, checkpoint_name: str | None = None
@@ -107,7 +105,6 @@ class LSFEvaluator:
                 context_length,
                 self.mode,
                 self.samples_per_batch,
-                # self.use_static_scaling, TODO(Anna) - check if this can be removed while still reproducing the same results
             )
             forecasts = list(
                 predictor.predict(
