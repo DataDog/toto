@@ -15,10 +15,8 @@ ray job submit \
 # TODO(Anna) - update the description of the script and its usage
 
 import argparse
-from tabulate import tabulate
 import os
 import sys
-
 from dataclasses import dataclass
 from typing import List
 
@@ -26,6 +24,7 @@ import numpy as np
 import pandas as pd
 import ray
 import torch
+from tabulate import tabulate
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -33,7 +32,6 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from toto.evaluation.lsf.lsf_datasets import LSFDatasetName
 from toto.evaluation.lsf.lsf_evaluator import LSFEvaluator
 from toto.inference.gluonts_predictor import Multivariate
-
 from toto.model.toto import Toto
 
 LSF_DATASETS_LOCAL_PATH = "./data/lsf_datasets"
@@ -113,7 +111,7 @@ def get_parser():
     parser.add_argument(
         "--samples-per-batch",
         type=int,
-        default=25,
+        default=256,
         help="Number of samples to draw per batch.",
     )
 
