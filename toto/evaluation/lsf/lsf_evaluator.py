@@ -14,23 +14,9 @@ from toto.inference.gluonts_predictor import (
 )
 from toto.model.toto import Toto
 
-# TODO(Anna): keep all those metrics or just MAE and MSE?
 POINT_FORECAST_METRICS = [
     gluon_metrics.MAE("0.5"),
     gluon_metrics.MSE("0.5"),
-    gluon_metrics.SMAPE("0.5"),
-    gluon_metrics.MASE("0.5"),
-    gluon_metrics.MAE("mean"),
-    gluon_metrics.MSE("mean"),
-    gluon_metrics.SMAPE("mean"),
-    gluon_metrics.MASE("mean"),
-]
-
-
-PROBABILISTIC_FORECAST_METRICS = [
-    gluon_metrics.MSIS(),
-    # This is an approximation of CRPS based on empirical quantiles
-    gluon_metrics.MeanWeightedSumQuantileLoss(quantile_levels=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]),
 ]
 
 
@@ -44,7 +30,7 @@ class LSFEvaluator:
 
     def __init__(
         self,
-        metrics: list[gluon_metrics.Metric] = POINT_FORECAST_METRICS + PROBABILISTIC_FORECAST_METRICS,
+        metrics: list[gluon_metrics.Metric] = POINT_FORECAST_METRICS,
         datasets: list[LSFDatasetName] = [
             LSFDatasetName.ETTh1,
             LSFDatasetName.ETTh2,
