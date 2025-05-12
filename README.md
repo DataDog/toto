@@ -18,7 +18,8 @@ This repository also hosts the code for evaluating time series models on BOOM (*
 - [Citation](#citation)
 - [License](#license)
 - [Contributing](#contributing)
-
+#TODO(Anna) - add section for how to run LSF eval 
+#TODO(Anna) - where to download the data - okay for ETT, where to find electricity and weather?
 ## Toto model
 
 ### Features
