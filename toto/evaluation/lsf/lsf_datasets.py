@@ -1,8 +1,3 @@
-"""
-Adapted from https://github.com/SalesforceAIResearch/uni2ts/tree/ce27c2f9a0c6ee9119997e8ef0026388f143dcd6/src/uni2ts/eval_util
-(Apache License 2.0)
-"""
-
 import os
 from enum import Enum
 from typing import NamedTuple
