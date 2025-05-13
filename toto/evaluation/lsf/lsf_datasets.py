@@ -1,3 +1,12 @@
+# Unless explicitly stated otherwise all files in this repository are licensed under the Apache-2.0 License.
+#
+# This product includes software developed at Datadog (https://www.datadoghq.com/)
+# Copyright 2023 Salesforce, Inc.
+# Copyright 2025 Datadog, Inc.
+#
+# (Adapted from https://github.com/SalesforceAIResearch/uni2ts/tree/ce27c2f9a0c6ee9119997e8ef0026388f143dcd6/src/uni2ts/eval_util)
+#
+
 import os
 from enum import Enum
 from typing import NamedTuple
