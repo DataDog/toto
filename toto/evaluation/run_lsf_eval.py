@@ -1,18 +1,19 @@
 """
-This script evaluates a TOTO model on LSF datasets using checkpoints obtained from MLFlow runs.
-It fetches the best checkpoints based on validation metrics, evaluates each checkpoint on LSF datasets,
-and logs the evaluation results as CSV artifacts in MLFlow.
+This script evaluates a TOTO model on LSF datasets using a specified checkpoint dir path or model id.
+It supports evaluating multiple datasets, prediction lengths, and context lengths in parallel using Ray.
+The evaluation results are summarized and displayed in a tabular format.
 
 Example usage:
 
-ray job submit \
-    --address [RAY_CLUSTER_ADDRESS] \
-    --runtime-env ./lsf_eval_runtime.yaml -- \
-    python scripts/run_lsf_eval.py \
-    --mlflow-run-id [MLFLOW_RUN_ID]
+python toto/evaluation/run_lsf_eval.py \
+    --datasets ETTh1 \
+    --context-length 2048 \
+    --eval-stride 1 \
+    --checkpoint-path [CHECKPOINT-NAME-OR-DIR] \
+    --num-gpus 2
 """
 
-# TODO(Anna) - update the description of the script and its usage
+# TODO(Anna) - test if paper's numbers are reproducible
 
 import argparse
 import os
@@ -243,8 +244,15 @@ def main():
     # Combine results and summarize
     results = pd.concat(task_results)
     summary_results = results.groupby(["checkpoint", "dataset"]).mean()
-    print(tabulate(results.reset_index(), headers="keys", tablefmt="psql"))  # Table-like format
-    print(tabulate(summary_results.reset_index(), headers="keys", tablefmt="psql"))  # Table-like format
+    print(
+        tabulate(
+            results.sort_values(["dataset", "context_length", "prediction_length"]),
+            headers="keys",
+            tablefmt="psql",
+            showindex=False,
+        )
+    )  # Table-like format
+    print(tabulate(summary_results, headers="keys", tablefmt="psql", showindex=False))  # Table-like format
 
 
 if __name__ == "__main__":
