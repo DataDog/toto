@@ -13,8 +13,6 @@ python toto/evaluation/run_lsf_eval.py \
     --num-gpus 2
 """
 
-# TODO(Anna) - test if paper's numbers are reproducible
-
 import argparse
 import os
 import sys
@@ -244,8 +242,17 @@ def main():
     # Combine results and summarize
     results = pd.concat(task_results)
     summary_results = results.groupby(["checkpoint", "dataset"]).mean()
-    print(tabulate(results.reset_index().sort_values(["dataset", "context_length", "prediction_length"]), headers="keys", tablefmt="psql", showindex=False))  # Table-like format
-    print(tabulate(summary_results.reset_index(), headers="keys", tablefmt="psql", showindex=False))  # Table-like format
+    print(
+        tabulate(
+            results.reset_index().sort_values(["dataset", "context_length", "prediction_length"]),
+            headers="keys",
+            tablefmt="psql",
+            showindex=False,
+        )
+    )  # Table-like format
+    print(
+        tabulate(summary_results.reset_index(), headers="keys", tablefmt="psql", showindex=False)
+    )  # Table-like format
 
 
 if __name__ == "__main__":
