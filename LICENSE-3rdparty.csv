@@ -1,0 +1,5 @@
+Component,Origin,License,Copyright
+GiftEval,https://github.com/SalesforceAIResearch/gift-eval,Apache-2.0,Copyright (c) 2024 Salesforce AI Research
+Time-MOE, https://github.com/Time-MoE/Time-MoE, Apache-2.0, Copyright (c) 2023 Salesforce Inc.
+Large-Time-Series-Model, https://github.com/thuml/Large-Time-Series-Model/, MIT, Copyright (c) 2021 THUML @ Tsinghua University
+VisionTS, https://github.com/Keytoyze/VisionTS/, MIT, Copyright (c) 2024 Mouxiang Chen

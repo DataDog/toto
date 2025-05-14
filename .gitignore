@@ -1,0 +1,60 @@
+*.rdb
+*.swp
+*.swo
+*.swn
+*.so
+*.log
+
+# Python
+*.pyc
+*.egg/
+*.egg*
+*egg*
+pyx/*.c
+pyx/*.html
+.ipynb_checkpoints
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Icon?
+ehthumbs.db
+Thumbs.db
+
+*~
+.\#*
+\#~
+
+# Eclipse
+bin/
+*.launch
+.settings
+.project
+.classpath
+
+# IntelliJ IDEA
+**/.idea
+*.iml
+*.ipr
+*.iws
+out/
+
+# Visual Studio Code
+**/.vscode
+**.code-workspace
+
+# Projects
+**/.venv
+env/
+
+
+# Packaging
+**/build
+**/*.egg-info
+
+# Cache
+**/.mypy_cache
+**/.pytest_cache

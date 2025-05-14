@@ -1,0 +1,21 @@
+[project]
+name = "Toto"
+version = "0.1.0"
+dynamic = ["dependencies"]
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}
+
+[tool.setuptools.packages.find]
+include = ["*"]
+
+[tool.black]
+# https://black.readthedocs.io/en/stable/usage_and_configuration/the_basics.html#command-line-options
+# default is 88
+line-length = 120
+# default is per-file auto-detection
+target-version = ['py310']
+include = '\.py$'
+
+[tool.isort]
+profile = "black"

@@ -1,0 +1,17 @@
+repos:
+- repo: local
+  hooks:
+    - id: black
+      name: black
+      entry: black toto
+      language: system
+      files: \.py$
+    - id: isort
+      name: isort
+      entry: isort
+      stages: [pre-commit, pre-merge-commit, pre-push, manual]
+      require_serial: true
+      language: python
+      types_or: [cython, pyi, python]
+      args: ['--filter-files', '--profile', 'black']
+      minimum_pre_commit_version: '2.9.2'
