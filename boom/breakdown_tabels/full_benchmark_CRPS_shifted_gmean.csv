@@ -1,0 +1,16 @@
+model,full_benchmark
+autoarima,0.736
+autoets,1.975
+autotheta,1.018
+chronos_bolt_base,0.451
+chronos_bolt_small,0.455
+moirai_1.1_base,0.428
+moirai_1.1_large,0.436
+moirai_1.1_small,0.442
+seasonalnaive,1.0
+time-moe-200M,0.643
+time-moe-50M,0.649
+timer,0.639
+timesfm_2_0_500m,0.447
+toto,0.375
+visionts,0.673

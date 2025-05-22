@@ -1,0 +1,292 @@
+{
+    "dd-3-10S": {
+        "domain": [
+            "Application Usage",
+            "Infrastructure"
+        ],
+        "frequency": "Short",
+        "num_variates": 33,
+        "term": "long",
+        "metric_type": "gauge"
+    },
+    "dd-22-10S": {
+        "domain": [
+            "Infrastructure"
+        ],
+        "frequency": "Short",
+        "num_variates": 50,
+        "term": "long",
+        "metric_type": "gauge"
+    },
+    "dd-35-10S": {
+        "domain": [
+            "Infrastructure"
+        ],
+        "frequency": "Short",
+        "num_variates": 90,
+        "term": "long",
+        "metric_type": "gauge"
+    },
+    "dd-189-10S": {
+        "domain": [
+            "Infrastructure"
+        ],
+        "frequency": "Short",
+        "num_variates": 55,
+        "term": "long",
+        "metric_type": "gauge"
+    },
+    "dd-285-T": {
+        "domain": [
+            "Database"
+        ],
+        "frequency": "Short",
+        "num_variates": 75,
+        "term": "long",
+        "metric_type": "gauge"
+    },
+    "dd-374-10S": {
+        "domain": [
+            "Infrastructure"
+        ],
+        "frequency": "Short",
+        "num_variates": 50,
+        "term": "long",
+        "metric_type": "gauge"
+    },
+    "dd-413-10S": {
+        "domain": [
+            "Infrastructure"
+        ],
+        "frequency": "Short",
+        "num_variates": 33,
+        "term": "long",
+        "metric_type": "gauge"
+    },
+    "dd-496-10S": {
+        "domain": [
+            "Application Usage"
+        ],
+        "frequency": "Short",
+        "num_variates": 36,
+        "term": "long",
+        "metric_type": "gauge"
+    },
+    "dd-619-T": {
+        "domain": [
+            "Infrastructure"
+        ],
+        "frequency": "Short",
+        "num_variates": 52,
+        "term": "long",
+        "metric_type": "gauge"
+    },
+    "dd-772-T": {
+        "domain": [
+            "Infrastructure"
+        ],
+        "frequency": "Short",
+        "num_variates": 67,
+        "term": "long",
+        "metric_type": "gauge"
+    },
+    "dd-833-10S": {
+        "domain": [
+            "Application Usage"
+        ],
+        "frequency": "Short",
+        "num_variates": 24,
+        "term": "long",
+        "metric_type": "rate"
+    },
+    "dd-957-10S": {
+        "domain": [
+            "Application Usage"
+        ],
+        "frequency": "Short",
+        "num_variates": 26,
+        "term": "long",
+        "metric_type": "rate"
+    },
+    "dd-963-T": {
+        "domain": [
+            "Application Usage"
+        ],
+        "frequency": "Short",
+        "num_variates": 28,
+        "term": "long",
+        "metric_type": "rate"
+    },
+    "dd-1062-5T": {
+        "domain": [
+            "Database"
+        ],
+        "frequency": "Short",
+        "num_variates": 21,
+        "term": "long",
+        "metric_type": "gauge"
+    },
+    "dd-1170-10S": {
+        "domain": [
+            "Networking"
+        ],
+        "frequency": "Short",
+        "num_variates": 31,
+        "term": "long",
+        "metric_type": "gauge"
+    },
+    "dd-1209-5T": {
+        "domain": [
+            "Application Usage",
+            "Infrastructure"
+        ],
+        "frequency": "Short",
+        "num_variates": 53,
+        "term": "long",
+        "metric_type": "gauge"
+    },
+    "dd-1225-T": {
+        "domain": [
+            "Infrastructure"
+        ],
+        "frequency": "Short",
+        "num_variates": 49,
+        "term": "long",
+        "metric_type": "gauge"
+    },
+    "dd-1230-5T": {
+        "domain": [
+            "Infrastructure"
+        ],
+        "frequency": "Short",
+        "num_variates": 23,
+        "term": "long",
+        "metric_type": "gauge"
+    },
+    "dd-1280-10S": {
+        "domain": [
+            "Application Usage"
+        ],
+        "frequency": "Short",
+        "num_variates": 35,
+        "term": "long",
+        "metric_type": "rate"
+    },
+    "dd-1282-T": {
+        "domain": [
+            "Application Usage"
+        ],
+        "frequency": "Short",
+        "num_variates": 35,
+        "term": "long",
+        "metric_type": "rate"
+    },
+    "dd-1289-10S": {
+        "domain": [
+            "Application Usage"
+        ],
+        "frequency": "Short",
+        "num_variates": 42,
+        "term": "long",
+        "metric_type": "rate"
+    },
+    "dd-1309-10S": {
+        "domain": [
+            "Application Usage"
+        ],
+        "frequency": "Short",
+        "num_variates": 38,
+        "term": "long",
+        "metric_type": "rate"
+    },
+    "dd-1324-10S": {
+        "domain": [
+            "Application Usage"
+        ],
+        "frequency": "Short",
+        "num_variates": 41,
+        "term": "long",
+        "metric_type": "rate"
+    },
+    "dd-1400-10S": {
+        "domain": [
+            "Application Usage"
+        ],
+        "frequency": "Short",
+        "num_variates": 75,
+        "term": "long",
+        "metric_type": "rate"
+    },
+    "dd-1487-5T": {
+        "domain": [
+            "Application Usage"
+        ],
+        "frequency": "Short",
+        "num_variates": 54,
+        "term": "long",
+        "metric_type": "distribution"
+    },
+    "dd-1520-10S": {
+        "domain": [
+            "Database"
+        ],
+        "frequency": "Short",
+        "num_variates": 80,
+        "term": "long",
+        "metric_type": "count"
+    },
+    "dd-1564-10S": {
+        "domain": [
+            "Database"
+        ],
+        "frequency": "Short",
+        "num_variates": 64,
+        "term": "long",
+        "metric_type": "rate"
+    },
+    "dd-1631-30T": {
+        "domain": [
+            "Infrastructure"
+        ],
+        "frequency": "Short",
+        "num_variates": 40,
+        "term": "long",
+        "metric_type": "gauge"
+    },
+    "dd-1676-30T": {
+        "domain": [
+            "Database"
+        ],
+        "frequency": "Short",
+        "num_variates": 100,
+        "term": "long",
+        "metric_type": "gauge"
+    },
+    "dd-1855-H": {
+        "domain": [
+            "Infrastructure"
+        ],
+        "frequency": "Medium",
+        "num_variates": 52,
+        "term": "long",
+        "metric_type": "gauge"
+    },
+    "dd-1975-H": {
+        "domain": [
+            "Application Usage"
+        ],
+        "frequency": "Medium",
+        "num_variates": 75,
+        "term": "long",
+        "metric_type": "gauge"
+    },
+    "dd-2187-H": {
+        "domain": [
+            "Infrastructure"
+        ],
+        "frequency": "Medium",
+        "num_variates": 100,
+        "term": "long",
+        "metric_type": "gauge"
+    }
+}

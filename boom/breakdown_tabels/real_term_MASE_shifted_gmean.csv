@@ -1,0 +1,16 @@
+model,long,medium,short
+autoarima,0.895,0.853,0.749
+autoets,0.938,0.885,0.739
+autotheta,1.368,1.163,0.928
+chronos_bolt_base,0.798,0.782,0.632
+chronos_bolt_small,0.813,0.782,0.637
+moirai_1.1_base,0.78,0.753,0.627
+moirai_1.1_large,0.799,0.77,0.626
+moirai_1.1_small,0.797,0.769,0.649
+seasonalnaive,1.0,1.0,1.0
+time-moe-200M,0.95,0.929,0.794
+time-moe-50M,0.886,0.866,0.704
+timer,0.809,0.804,0.779
+timesfm_2_0_500m,0.817,0.78,0.619
+toto,0.688,0.657,0.535
+visionts,1.028,1.006,0.943
