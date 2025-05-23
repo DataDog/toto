@@ -10,13 +10,10 @@ import pytest
 import torch
 from beartype import beartype
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
+from ..helper_functions import set_default_dtype, skip_if_no_xformers
 
-from helper_functions import set_default_dtype, skip_if_no_xformers
-
-from model.transformer import Transformer
-from model.util import KVCache
+from toto.model.transformer import Transformer
+from toto.model.util import KVCache
 
 skip_if_no_xformers()
 set_default_dtype()

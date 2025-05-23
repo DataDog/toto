@@ -11,10 +11,10 @@ import torch
 from einops import rearrange
 from jaxtyping import Float, Int
 
-from model.attention import TimeWiseMultiheadAttention
+from ..model.attention import TimeWiseMultiheadAttention
 
 if TYPE_CHECKING:
-    from model.transformer import TransformerLayer  # Import only for type checking
+    from ..model.transformer import TransformerLayer  # Import only for type checking
 
 try:
     from xformers import _is_triton_available

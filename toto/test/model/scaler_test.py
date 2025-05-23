@@ -6,12 +6,9 @@
 import os
 import sys
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
-
 import torch
 
-from model.scaler import CausalPatchStdMeanScaler, CausalStdMeanScaler
+from toto.model.scaler import CausalPatchStdMeanScaler, CausalStdMeanScaler
 
 MIN_SCALE = 1e-6
 
