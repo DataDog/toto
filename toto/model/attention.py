@@ -11,10 +11,10 @@ import torch
 from einops import rearrange
 from jaxtyping import Bool, Float, Int
 
-from model.rope import TimeAwareRotaryEmbedding
+from ..model.rope import TimeAwareRotaryEmbedding
 
 if TYPE_CHECKING:
-    from model.util import KVCache  # Import only for type checking
+    from ..model.util import KVCache  # Import only for type checking
 
 
 try:

@@ -58,8 +58,8 @@ cd toto
 python -m venv .venv
 source .venv/bin/activate
 
-# Install dependencies
-pip install -r requirements.txt
+# Install package
+pip install --editable .
 ```
 For optimal inference speed, it's recommended to install [xformers](https://github.com/facebookresearch/xformers?tab=readme-ov-file#installing-xformers) and [flash-attention](https://github.com/Dao-AILab/flash-attention?tab=readme-ov-file#installation-and-features) as well.
 
@@ -71,9 +71,9 @@ Here's a simple example to get you started with forecasting:
 
 ```python
 import torch
-from data.util.dataset import MaskedTimeseries
-from inference.forecaster import TotoForecaster
-from model.toto import Toto
+from toto.data.util.dataset import MaskedTimeseries
+from toto.inference.forecaster import TotoForecaster
+from toto.model.toto import Toto
 
 # Load the pre-trained model
 toto = Toto.from_pretrained('Datadog/Toto-Open-Base-1.0')
