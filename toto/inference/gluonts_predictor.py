@@ -27,9 +27,9 @@ from gluonts.transform import (
 )
 from tqdm import tqdm
 
-from data.util.dataset import MaskedTimeseries
-from inference.forecaster import TotoForecaster
-from model.toto import Toto
+from toto.data.util.dataset import MaskedTimeseries
+from toto.inference.forecaster import TotoForecaster
+from toto.model.toto import Toto
 
 
 @dataclass(frozen=True)
