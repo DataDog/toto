@@ -188,7 +188,7 @@ class TotoSampleForecastGenerator(SampleForecastGenerator):
                     samples=samples[item_idx],
                     mean=avg[item_idx],
                     start_date=batch["forecast_start"][item_idx],
-                    item_id=None,
+                    item_id=batch['item_id'][item_idx],
                     info=None,
                 )
 
