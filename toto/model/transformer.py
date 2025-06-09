@@ -12,15 +12,15 @@ from einops import rearrange
 from jaxtyping import Bool, Float, Int
 from rotary_embedding_torch import RotaryEmbedding
 
-from model.attention import (
+from ..model.attention import (
     AttentionAxis,
     MultiHeadAttention,
     SpaceWiseMultiheadAttention,
     TimeWiseMultiheadAttention,
 )
-from model.feed_forward import SwiGLU
-from model.rope import TimeAwareRotaryEmbedding
-from model.util import KVCache, RMSNorm, make_batched_block_mask
+from ..model.feed_forward import SwiGLU
+from ..model.rope import TimeAwareRotaryEmbedding
+from ..model.util import KVCache, RMSNorm, make_batched_block_mask
 
 try:
     from xformers.ops.swiglu_op import SwiGLU as SwiGLU_fused

@@ -11,19 +11,15 @@ import pytest
 import torch
 from beartype import beartype
 
-# Ensure the root directory is in the Python path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
-
-from helper_functions import set_default_dtype, skip_if_no_xformers
+from ..helper_functions import set_default_dtype, skip_if_no_xformers
 
 skip_if_no_xformers()
 set_default_dtype()
 
 
-from data.util.dataset import MaskedTimeseries
-from inference.forecaster import Forecast, TotoForecaster
-from model.backbone import PatchEmbedding, TotoBackbone
+from toto.data.util.dataset import MaskedTimeseries
+from toto.inference.forecaster import Forecast, TotoForecaster
+from toto.model.backbone import PatchEmbedding, TotoBackbone
 
 
 @pytest.fixture
