@@ -22,6 +22,7 @@ dependencies = [
     "types-tabulate==0.9.0.20241207",
     "tqdm>=4.66.3,<5",
     "tabulate>=0.9.0,<1",
+    "transformers~=4.52.1",
 
 
 ]
@@ -42,7 +43,6 @@ dev = [
     "mypy>=1.11.1,<2",
     "pytest>=8.3.5,<9",
     "pytest-env>=1.1.5,<2",
-    "transformers~=4.52.1",
     "mypy>=1.11.1,<2",
     "black~=24.10.0",
     "isort~=5.13.2",
