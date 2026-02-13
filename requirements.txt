@@ -21,7 +21,7 @@ mypy==1.11.1
 pyyaml==6.0.2
 types-PyYAML==6.0.12.20240917
 black==24.10.0
-isort==5.13.2
+isort==7.0.0
 PyYAML==6.0.2
 jupyter==1.1.1
 matplotlib==3.9.2
