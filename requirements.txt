@@ -4,7 +4,7 @@ beartype==0.18.5
 boto3==1.34.69
 datasets==2.17.1
 dill==0.3.8
-einops==0.7.0
+einops==0.8.2
 gluonts[torch]==0.15.1
 jaxtyping==0.2.29
 mypy==1.11.1
