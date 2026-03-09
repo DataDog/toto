@@ -19,11 +19,11 @@ transformers==4.52.1
 tqdm==4.66.3
 beartype==0.18.5
 mypy==1.11.1
-pyyaml==6.0.2
-types-PyYAML==6.0.12.20240917
+PyYAML==6.0.3
+types-PyYAML==6.0.12.20250915
 black==24.10.0
 isort==5.13.2
-PyYAML==6.0.2
+PyYAML==6.0.3
 jupyter==1.1.1
 matplotlib==3.9.2
 tabulate==0.9.0
