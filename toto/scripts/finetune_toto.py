@@ -50,6 +50,10 @@ def init_lightning(config: Dict[str, Any]) -> Tuple[TotoForFinetuning, int]:
         warmup_steps=int(mcfg.get("warmup_steps", 200)),
         lr=float(mcfg.get("lr", 1e-4)),
         min_lr=float(mcfg.get("min_lr", 1e-5)),
+        causal_robust_lambda=float(mcfg.get("causal_robust_lambda", 0.0)),
+        causal_robust_alpha=float(mcfg.get("causal_robust_alpha", 1e-4)),
+        causal_robust_eps=float(mcfg.get("causal_robust_eps", 1e-6)),
+        causal_robust_max_penalty=float(mcfg.get("causal_robust_max_penalty", 20.0)),
         add_exogenous_features=bool(dcfg.get("add_exogenous_features", False)),
     )
 

@@ -4,6 +4,7 @@
 # Copyright 2025 Datadog, Inc.
 
 import logging
+import math
 import warnings
 from enum import Enum
 from typing import TYPE_CHECKING, Optional, Union
@@ -72,6 +73,84 @@ class BaseMultiheadAttention(torch.nn.Module):
 
         if not hasattr(self, "attention_axis") or self.attention_axis not in (AttentionAxis.TIME, AttentionAxis.SPACE):
             raise ValueError("Child class must define attention_axis as AttentionAxis.TIME or AttentionAxis.SPACE.")
+
+        # Optional stability regularization inspired by causal-transformer margin/barrier ideas.
+        # Disabled by default to preserve legacy behavior and performance.
+        self.enable_causal_robustness = False
+        self.causal_robustness_alpha = 1e-4
+        self.causal_robustness_eps = 1e-6
+        self.causal_robustness_max_penalty = 20.0
+        self.latest_causal_robustness_penalty: Optional[torch.Tensor] = None
+
+    def configure_causal_robustness(
+        self,
+        *,
+        enabled: bool,
+        alpha: float = 1e-4,
+        eps: float = 1e-6,
+        max_penalty: float = 20.0,
+    ) -> None:
+        """
+        Configure optional causal robustness regularization on this attention layer.
+
+        The regularizer computes a log-barrier-style penalty based on attention-weighted
+        value variance in time-wise attention:
+            margin = 1 - alpha * Tr(Var_attn[v])
+            penalty = -log(clamp(margin, min=eps))
+        """
+        self.enable_causal_robustness = enabled
+        self.causal_robustness_alpha = float(alpha)
+        self.causal_robustness_eps = float(eps)
+        self.causal_robustness_max_penalty = float(max_penalty)
+
+    def _to_stats_layout(self, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor) -> tuple[torch.Tensor, ...]:
+        """
+        Convert Q/K/V to a shared layout (N, H, T, D) for diagnostic calculations.
+        """
+        if self.use_memory_efficient_attention:
+            # (N, T, H, D) -> (N, H, T, D)
+            return q.permute(0, 2, 1, 3), k.permute(0, 2, 1, 3), v.permute(0, 2, 1, 3)
+        # Already (N, H, T, D)
+        return q, k, v
+
+    def _compute_causal_robustness_penalty(
+        self,
+        q: torch.Tensor,
+        k: torch.Tensor,
+        v: torch.Tensor,
+        seq_pos_offset: int,
+    ) -> torch.Tensor:
+        """
+        Compute a differentiable stability penalty from time-wise attention statistics.
+        """
+        q_stats, k_stats, v_stats = self._to_stats_layout(q, k, v)
+
+        # Use float32 for numerical stability while keeping gradients.
+        q_stats = q_stats.float()
+        k_stats = k_stats.float()
+        v_stats = v_stats.float()
+
+        scale = 1.0 / math.sqrt(self.head_dim)
+        scores = torch.einsum("nhtd,nhsd->nhts", q_stats, k_stats) * scale
+
+        # Match the current attention behavior: strict causal masking on first pass,
+        # no additional within-chunk masking when decoding with a cache offset.
+        if seq_pos_offset == 0:
+            q_len = scores.shape[-2]
+            k_len = scores.shape[-1]
+            causal_mask = torch.tril(torch.ones((q_len, k_len), device=scores.device, dtype=torch.bool))
+            scores = scores.masked_fill(~causal_mask, torch.finfo(scores.dtype).min)
+
+        attn_weights = torch.softmax(scores, dim=-1)
+
+        attn_mean = torch.einsum("nhts,nhsd->nhtd", attn_weights, v_stats)
+        attn_second_moment = torch.einsum("nhts,nhsd->nhtd", attn_weights, v_stats * v_stats)
+        attn_var_trace = (attn_second_moment - attn_mean * attn_mean).clamp_min(0.0).sum(dim=-1)
+
+        margins = 1.0 - self.causal_robustness_alpha * attn_var_trace
+        barrier = -torch.log(margins.clamp_min(self.causal_robustness_eps))
+        barrier = barrier.clamp_max(self.causal_robustness_max_penalty)
+        return barrier.mean().to(dtype=q.dtype)
 
     def rearrange_inputs(
         self, inputs: Float[torch.Tensor, "batch variate seq_len embed_dim"]
@@ -198,6 +277,7 @@ class BaseMultiheadAttention(torch.nn.Module):
         ] = None,
         kv_cache: Optional["KVCache"] = None,
     ) -> Float[torch.Tensor, "batch variate seq_len embed_dim"]:
+        self.latest_causal_robustness_penalty = None
         batch_size, variate, seq_len, _ = inputs.shape
         dropout = self.dropout if self.training else 0.0
 
@@ -205,6 +285,14 @@ class BaseMultiheadAttention(torch.nn.Module):
         q, k, v = self.get_qkv(rearranged_inputs)
 
         q, k, v, seq_pos_offset = self.positional_embedding(q, k, v, kv_cache, layer_idx)
+
+        if self.enable_causal_robustness and self.training and self.attention_axis == AttentionAxis.TIME:
+            self.latest_causal_robustness_penalty = self._compute_causal_robustness_penalty(
+                q=q,
+                k=k,
+                v=v,
+                seq_pos_offset=seq_pos_offset,
+            )
 
         output = self.run_attention(attention_mask, q, k, v, seq_pos_offset, dropout, seq_len, variate)
 

@@ -68,6 +68,10 @@ class TransformerLayer(torch.nn.Module):
         attention_axis: AttentionAxis = AttentionAxis.TIME,
         RMS_norm: bool = True,
         use_memory_efficient_attention: bool = True,
+        enable_causal_robustness: bool = False,
+        causal_robustness_alpha: float = 1e-4,
+        causal_robustness_eps: float = 1e-6,
+        causal_robustness_max_penalty: float = 20.0,
     ):
         super().__init__()
         self.embed_dim = embed_dim
@@ -104,6 +108,13 @@ class TransformerLayer(torch.nn.Module):
             )
         else:
             raise ValueError("Invalid attention axis")
+
+        self.attention.configure_causal_robustness(
+            enabled=enable_causal_robustness,
+            alpha=causal_robustness_alpha,
+            eps=causal_robustness_eps,
+            max_penalty=causal_robustness_max_penalty,
+        )
 
         if XFORMERS_SWIGLU_AVAILABLE:
             self.mlp = torch.nn.Sequential(
@@ -176,6 +187,10 @@ class Transformer(torch.nn.Module):
         spacewise_every_n_layers: int,
         spacewise_first: bool,
         use_memory_efficient_attention: bool = True,
+        enable_causal_robustness: bool = False,
+        causal_robustness_alpha: float = 1e-4,
+        causal_robustness_eps: float = 1e-6,
+        causal_robustness_max_penalty: float = 20.0,
         *,
         fusion: Optional[Fusion] = None,
     ):
@@ -193,6 +208,7 @@ class Transformer(torch.nn.Module):
 
         self.use_memory_efficient_attention = use_memory_efficient_attention
         self.fusion = fusion
+        self.latest_causal_robustness_penalty: Optional[torch.Tensor] = None
 
         self.layers = torch.nn.ModuleList(
             [
@@ -204,10 +220,30 @@ class Transformer(torch.nn.Module):
                     rotary_emb=self.rotary_emb,
                     attention_axis=attention_axes[i],
                     use_memory_efficient_attention=self.use_memory_efficient_attention,
+                    enable_causal_robustness=enable_causal_robustness,
+                    causal_robustness_alpha=causal_robustness_alpha,
+                    causal_robustness_eps=causal_robustness_eps,
+                    causal_robustness_max_penalty=causal_robustness_max_penalty,
                 )
                 for i in range(num_layers)
             ]
         )
+
+    def configure_causal_robustness(
+        self,
+        *,
+        enabled: bool,
+        alpha: float = 1e-4,
+        eps: float = 1e-6,
+        max_penalty: float = 20.0,
+    ) -> None:
+        for layer in self.layers:
+            layer.attention.configure_causal_robustness(
+                enabled=enabled,
+                alpha=alpha,
+                eps=eps,
+                max_penalty=max_penalty,
+            )
 
     def _get_mask(
         self,
@@ -341,6 +377,7 @@ class Transformer(torch.nn.Module):
             id_mask=id_mask,
         )
 
+        causal_robustness_terms = []
         for layer_idx, layer in enumerate(self.layers):
             inputs = layer(
                 layer_idx,
@@ -348,4 +385,11 @@ class Transformer(torch.nn.Module):
                 (timewise_attention_mask if layer.attention_axis == AttentionAxis.TIME else spacewise_attention_mask),
                 kv_cache,
             )
+            if layer.attention.latest_causal_robustness_penalty is not None:
+                causal_robustness_terms.append(layer.attention.latest_causal_robustness_penalty)
+
+        if len(causal_robustness_terms) > 0:
+            self.latest_causal_robustness_penalty = torch.stack(causal_robustness_terms).mean()
+        else:
+            self.latest_causal_robustness_penalty = None
         return inputs

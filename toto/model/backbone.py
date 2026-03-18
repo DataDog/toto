@@ -94,9 +94,14 @@ class TotoBackbone(torch.nn.Module):
         use_memory_efficient_attention: bool = True,
         stabilize_with_global: bool = True,
         scale_factor_exponent: float = 10.0,
+        enable_causal_robustness: bool = False,
+        causal_robustness_alpha: float = 1e-4,
+        causal_robustness_eps: float = 1e-6,
+        causal_robustness_max_penalty: float = 20.0,
     ):
         super().__init__()
         self.embed_dim = embed_dim
+        self.latest_causal_robustness_penalty: Optional[torch.Tensor] = None
         # Attributes for variate-label fusion (initialized when enable_variate_labels is called)
         self.fusion: Optional[Fusion] = None
         self.num_prepended_tokens: int = 0
@@ -126,6 +131,10 @@ class TotoBackbone(torch.nn.Module):
             spacewise_every_n_layers=spacewise_every_n_layers,
             spacewise_first=spacewise_first,
             use_memory_efficient_attention=self.use_memory_efficient_attention,
+            enable_causal_robustness=enable_causal_robustness,
+            causal_robustness_alpha=causal_robustness_alpha,
+            causal_robustness_eps=causal_robustness_eps,
+            causal_robustness_max_penalty=causal_robustness_max_penalty,
             fusion=self.fusion,
         )
         self.unembed = torch.nn.Linear(embed_dim, embed_dim * patch_size)
@@ -216,6 +225,7 @@ class TotoBackbone(torch.nn.Module):
         transformed: Float[torch.Tensor, "batch variates seq_len embed_dim"] = self.transformer(  # type: ignore[assignment]
             embeddings, reduced_id_mask, kv_cache, variate_label_embeds=variate_label_embeds
         )
+        self.latest_causal_robustness_penalty = self.transformer.latest_causal_robustness_penalty
         # Crop out the prepended tokens before unembedding
         added_tokens = transformed.shape[2] - original_seq_len
         if added_tokens > 0:
@@ -298,3 +308,18 @@ class TotoBackbone(torch.nn.Module):
             exog_mask[:, -num_exogenous_variables:] = True
         # Select per-variate label: target label for genuine targets, exogenous label for EV channels
         return torch.where(exog_mask, exogenous_variate_label, target_variate_label)  # (B, V, 1, D)
+
+    def configure_causal_robustness(
+        self,
+        *,
+        enabled: bool,
+        alpha: float = 1e-4,
+        eps: float = 1e-6,
+        max_penalty: float = 20.0,
+    ) -> None:
+        self.transformer.configure_causal_robustness(
+            enabled=enabled,
+            alpha=alpha,
+            eps=eps,
+            max_penalty=max_penalty,
+        )

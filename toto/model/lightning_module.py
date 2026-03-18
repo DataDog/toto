@@ -83,6 +83,10 @@ class TotoForFinetuning(L.LightningModule):
         min_lr: float = 1e-5,
         betas: tuple[float, float] = (0.9, 0.999),
         weight_decay: float = 0.01,
+        causal_robust_lambda: float = 0.0,
+        causal_robust_alpha: float = 1e-4,
+        causal_robust_eps: float = 1e-6,
+        causal_robust_max_penalty: float = 20.0,
         # backbone construction
         pretrained_backbone: TotoBackbone | None = None,
         add_exogenous_features: bool = False,
@@ -109,6 +113,15 @@ class TotoForFinetuning(L.LightningModule):
         self.stable_steps = stable_steps
         self.decay_steps = decay_steps
         self.val_prediction_len = val_prediction_len
+        self.causal_robust_lambda = causal_robust_lambda
+
+        if self.causal_robust_lambda > 0:
+            self.model.configure_causal_robustness(
+                enabled=True,
+                alpha=causal_robust_alpha,
+                eps=causal_robust_eps,
+                max_penalty=causal_robust_max_penalty,
+            )
 
         # Loss setup (currently hard-wired to CombinedLoss)
         self.combined_loss = CombinedLoss()
@@ -276,6 +289,27 @@ class TotoForFinetuning(L.LightningModule):
 
         mean_total = total_sum / (valid_count + eps)
         prefix = "train" if is_train else "val"
+
+        if self.causal_robust_lambda > 0 and self.model.latest_causal_robustness_penalty is not None:
+            causal_penalty = self.model.latest_causal_robustness_penalty
+            weighted_causal_penalty = self.causal_robust_lambda * causal_penalty
+            mean_total = mean_total + weighted_causal_penalty
+            self.log(
+                f"{prefix}_causal_robustness_penalty",
+                causal_penalty.detach(),
+                prog_bar=False,
+                on_step=is_train,
+                on_epoch=True,
+                batch_size=batch.series.shape[0],
+            )
+            self.log(
+                f"{prefix}_causal_robustness_penalty_weighted",
+                weighted_causal_penalty.detach(),
+                prog_bar=False,
+                on_step=is_train,
+                on_epoch=True,
+                batch_size=batch.series.shape[0],
+            )
 
         # Log loss for lightning progress bar and metrics
         self.log(

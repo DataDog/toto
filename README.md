@@ -233,6 +233,26 @@ To customize the fine-tuning recipe, modify the base configuration in [finetune_
 
 By default, the tutorial uses the `proenfo_gfc12` dataset from the [autogluon/fev_datasets](https://huggingface.co/datasets/autogluon/fev_datasets) collection.
 
+#### Causal Robust Fine-Tuning (Experimental)
+
+Toto now supports an optional causal robustness regularizer inspired by recent causal-transformer stability work.
+The regularizer adds a log-barrier-style penalty during training based on attention-weighted variance in time-wise attention layers.
+
+Enable it in `model` config:
+
+```yaml
+model:
+  causal_robust_lambda: 0.02
+  causal_robust_alpha: 0.0001
+  causal_robust_eps: 0.000001
+  causal_robust_max_penalty: 20.0
+```
+
+- `causal_robust_lambda`: weight of the robustness penalty in total training loss.
+- `causal_robust_alpha`: coupling term in `margin = 1 - alpha * variance_trace`.
+- `causal_robust_eps`: numerical floor for the log-barrier margin.
+- `causal_robust_max_penalty`: cap to avoid exploding penalties.
+
 #### Custom Datasets
 
 There are two ways to use custom datasets for fine-tuning:

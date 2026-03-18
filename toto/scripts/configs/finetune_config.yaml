@@ -8,6 +8,10 @@ model:
   warmup_steps: 1000         # number of linear warmup steps (change for different training schedules)
   stable_steps: 200          # number of stable learning rate steps (change for different training schedules)
   decay_steps: 200          # number of exponential decay steps (change for different training schedules)
+  causal_robust_lambda: 0.0  # set >0 to enable causal robustness barrier regularization
+  causal_robust_alpha: 0.0001 # margin coupling coefficient in margin = 1 - alpha * attn_var_trace
+  causal_robust_eps: 0.000001 # numerical floor for the log-barrier margin
+  causal_robust_max_penalty: 20.0 # cap per-token barrier contribution for stability
 
 data:
   context_factor: 8         # context length = patch_size * context_factor change for different training context lengths
