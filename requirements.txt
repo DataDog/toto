@@ -9,9 +9,9 @@ numpy==1.26.4
 gluonts[torch]==0.16.2
 jaxtyping==0.2.29
 mypy==1.11.1
-pandas==2.2.3
-pytest==8.3.5
-pytest-env==1.1.5
+pandas==2.3.3
+pytest==8.4.2
+pytest-env==1.6.0
 rotary-embedding-torch==0.8.6
 scikit-learn==1.5.0
 types-tabulate==0.9.0.20241207
@@ -28,5 +28,5 @@ jupyter==1.1.1
 matplotlib==3.9.2
 tabulate==0.9.0
 lightning==2.3.3
-rich>=10.2.2
+rich>=10.16.2
 tensorboard==2.20.0
