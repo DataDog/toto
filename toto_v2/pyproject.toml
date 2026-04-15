@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "toto-v2"
+version = "0.2.0"
+description = "Toto v2"
+requires-python = ">=3.12"
+license = {text = "Apache-2.0"}
+authors = [
+    {name = "DataDog, Inc."}
+]
+dependencies = [
+    "torch>=2.4.0",
+    "einops>=0.7.0",
+    "numpy>=1.26.0",
+    "gluonts[torch]>=0.16.0",
+    "huggingface-hub>=0.20.0",
+    "safetensors>=0.4.0",
+    "jaxtyping>=0.2.25",
+    "dd-unit-scaling @ git+https://github.com/DataDog/toto.git#subdirectory=dd_unit_scaling",
+    "matplotlib>=3.9.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.8.0",
+    "mypy>=1.11",
+]
+
+[tool.setuptools.packages.find]
+include = ["toto_v2*"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+ignore = ["F722"]
+
+[tool.ruff.lint.isort]
+combine-as-imports = true

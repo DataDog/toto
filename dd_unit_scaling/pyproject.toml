@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dd-unit-scaling"
+version = "0.1.0"
+description = "Compile-friendly, world-size-aware unit scaling"
+requires-python = ">=3.12"
+dependencies = [
+    "torch>=2.4.0",
+    "unit-scaling>=0.2.0",
+]
+
+[project.optional-dependencies]
+optim = [
+    "dion",
+]
+
+[tool.setuptools.packages.find]
+include = ["dd_unit_scaling*"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
