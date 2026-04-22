@@ -49,7 +49,6 @@ from .functional import (  # noqa: F811
 from .optim import (  # noqa: F811
     AdamW as AdamW,
     cache_fan_values as cache_fan_values,
-    CombinedOptimizer as CombinedOptimizer,
     create_dion2 as create_dion2,
     create_normuon as create_normuon,
     get_cached_metadata as get_cached_metadata,
