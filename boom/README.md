@@ -7,9 +7,13 @@ To run evals for Toto, make sure you've followed the installation instructions i
 ## Models
 
 - [Toto (this repository)](https://github.com/DataDog/toto)
+- [Toto v2 (this repository)](https://github.com/DataDog/toto/tree/main/toto_v2)
 - [Chronos](https://github.com/amazon-science/chronos-forecasting)
+- [Chronos-2](https://github.com/amazon-science/chronos-forecasting)
 - [Moirai](https://github.com/SalesforceAIResearch/uni2ts)
+- [Moirai 2.0](https://github.com/SalesforceAIResearch/uni2ts)
 - [TimesFM](https://github.com/google-research/timesfm)
+- [TimesFM 2.5](https://github.com/google-research/timesfm)
 - [VisionTS](https://github.com/Keytoyze/VisionTS.git)
 - [Timer](https://github.com/thuml/Large-Time-Series-Model.git)
 - [Time-MoE](https://github.com/Time-MoE/Time-MoE.git)
@@ -20,6 +24,9 @@ Our evaluation methodology is adapted from [Gift-Eval](https://github.com/Salesf
 
 ### Toto
 To set up the environment for Toto, follow the instructions in the [README](/README.md).
+
+### Toto v2
+To set up the environment for Toto v2, follow the Toto v2 installation instructions in the [README](/README.md). Register the resulting venv as the `toto2_eval_env` Jupyter kernel so the `toto2.ipynb` notebook binds to it.
 
 Download the following environments to reproduce these notebooks:
 
@@ -36,7 +43,22 @@ curl -L https://github.com/Time-MoE/Time-MoE/archive/8ce3c93898ca13fe05449370c0f
 curl -L https://github.com/Keytoyze/VisionTS/archive/9fc5f32311c161504e0a2be0f3c8f7f29e41923e.tar.gz -o /notebook_env/visionts.tar.gz
 
 curl -L https://github.com/thuml/Large-Time-Series-Model/archive/fee65cb8fbd0a1474a23829d68e9e2ed23ff16ab.tar.gz -o /notebook_env/timer.tar.gz
+
+curl -L https://github.com/SalesforceAIResearch/uni2ts/archive/8062ef5a5660d2fea395fd1288ec9c397396c168.tar.gz -o /notebook_env/moirai2.tar.gz
+
+curl -L https://github.com/amazon-science/chronos-forecasting/archive/fd533389c300660f9d8e3a00fcb29e4ca1174745.tar.gz -o /notebook_env/chronos2.tar.gz
+
+curl -L https://github.com/google-research/timesfm/archive/6ae67d41d813fcdab0a1bc785b79053c3769a63e.tar.gz -o /notebook_env/timesfm2_5.tar.gz
 ```
+
+> **Moirai 2.0 note:** The `moirai2.ipynb` notebook's first code cell
+> re-pins `gluonts~=0.14.3` because Gift-Eval's pyproject upgrades gluonts
+> to 0.15.1, which breaks `QuantileForecastGenerator` for Moirai 2.0. No
+> manual action required — just run the notebook top to bottom.
+
+> **Python version:** use Python **3.11**. Gift-Eval's pinned SHA
+> requires `pandas==2.0.0` (exact), which has no wheels for Python 3.12+
+> on Apple Silicon / some Linux arches.
 
 After downloading these repos, intialize a virtual environment for each model:
 ```sh
