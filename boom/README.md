@@ -7,6 +7,7 @@ To run evals for Toto, make sure you've followed the installation instructions i
 ## Models
 
 - [Toto (this repository)](https://github.com/DataDog/toto)
+- [Toto v2 (this repository)](https://github.com/DataDog/toto/tree/main/toto_v2)
 - [Chronos](https://github.com/amazon-science/chronos-forecasting)
 - [Chronos-2](https://github.com/amazon-science/chronos-forecasting)
 - [Moirai](https://github.com/SalesforceAIResearch/uni2ts)
@@ -23,6 +24,9 @@ Our evaluation methodology is adapted from [Gift-Eval](https://github.com/Salesf
 
 ### Toto
 To set up the environment for Toto, follow the instructions in the [README](/README.md).
+
+### Toto v2
+To set up the environment for Toto v2, follow the Toto v2 installation instructions in the [README](/README.md). Register the resulting venv as the `toto2_eval_env` Jupyter kernel so the `toto2.ipynb` notebook binds to it.
 
 Download the following environments to reproduce these notebooks:
 
