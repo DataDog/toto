@@ -38,14 +38,16 @@ from huggingface_hub import PyTorchModelHubMixin, load_torch_model
 from jaxtyping import Bool, Float, Int
 from safetensors.torch import load_file as load_safetensors_file
 
+import dd_unit_scaling as uu
+from dd_unit_scaling import functional as U
+
 from .configuration import Toto2GluonTSModelConfig, Toto2ModelConfig
+
 
 __all__ = [
     "Toto2Model",
     "Toto2GluonTSModel",
 ]
-
-
 
 
 # =====================================================================
@@ -96,18 +98,14 @@ class PatchedCausalStdScaler(nn.Module):
         loc, scale = loc.to(data.dtype), scale.to(data.dtype)
         return torch.where(mask, (data - loc) / scale, 0), loc, scale
 
-    def _compute_loc_scale(
-        self, data: torch.Tensor, mask: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    def _compute_loc_scale(self, data: torch.Tensor, mask: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         # Causal (cumulative) mean
         cum_data = (data * mask).cumsum(dim=-1)
         denominator = mask.cumsum(dim=-1).clamp_min(1)
         causal_loc = cum_data / denominator
 
         # Welford-style causal variance
-        prev_loc = torch.cat(
-            [torch.zeros_like(causal_loc[..., :1]), causal_loc[..., :-1]], dim=-1
-        )
+        prev_loc = torch.cat([torch.zeros_like(causal_loc[..., :1]), causal_loc[..., :-1]], dim=-1)
         delta = data - prev_loc
         increment = delta * (data - causal_loc) * mask
         m_2 = torch.cumsum(increment, dim=-1)
@@ -116,20 +114,82 @@ class PatchedCausalStdScaler(nn.Module):
 
         # Patch-aware: use last value in each patch, repeat across patch
         loc = repeat(
-            rearrange(
-                causal_loc, "... (seq patch) -> ... seq patch", patch=self.patch_size
-            )[..., -1],
+            rearrange(causal_loc, "... (seq patch) -> ... seq patch", patch=self.patch_size)[..., -1],
             "... seq -> ... (seq patch)",
             patch=self.patch_size,
         )
         scale = repeat(
-            rearrange(
-                causal_scale, "... (seq patch) -> ... seq patch", patch=self.patch_size
-            )[..., -1],
+            rearrange(causal_scale, "... (seq patch) -> ... seq patch", patch=self.patch_size)[..., -1],
             "... seq -> ... (seq patch)",
             patch=self.patch_size,
         )
         return loc, scale
+
+
+# =====================================================================
+# KV Cache
+# =====================================================================
+
+
+class StaticKVCacheLayer(nn.Module):
+    """Pre-allocated KV cache for a single attention layer (HSD layout, dim=2)."""
+
+    def __init__(self, max_size: int):
+        super().__init__()
+        self._max_size = max_size
+        self._initialized = False
+        self.register_buffer(
+            "_position",
+            torch.tensor(0, dtype=torch.long),
+            persistent=False,
+        )
+
+    def reset(self):
+        if self._initialized:
+            self._position.zero_()
+            self.keys.zero_()
+            self.values.zero_()
+
+    def forward(self, k: torch.Tensor, v: torch.Tensor):
+        if not self._initialized:
+            for name, t in [("keys", k), ("values", v)]:
+                shape = list(t.shape)
+                shape[2] = self._max_size
+                self.register_buffer(
+                    name,
+                    torch.zeros(shape, dtype=t.dtype, device=t.device),
+                    persistent=False,
+                )
+            self._initialized = True
+        incoming = k.size(2)
+        pos = torch.arange(incoming, device=k.device, dtype=torch.long) + self._position
+        self.keys.index_copy_(2, pos, k)
+        self.values.index_copy_(2, pos, v)
+        self._position.add_(incoming)
+
+
+class KVCache(nn.Module):
+    """Container for per-layer static KV caches.
+
+    Set ``ephemeral_len`` before a forward pass to indicate how many
+    trailing KV entries should be discarded after each layer processes
+    them (e.g. prediction block tokens regenerated each iteration).
+    The transformer rewinds each layer's cache inline during the layer loop.
+    """
+
+    def __init__(self, num_layers: int, max_size: int):
+        super().__init__()
+        self.cache_layers = nn.ModuleList([StaticKVCacheLayer(max_size) for _ in range(num_layers)])
+        self._max_size = max_size
+        self.ephemeral_len = 0
+
+    @property
+    def max_size(self) -> int:
+        return self._max_size
+
+    def reset(self):
+        for layer in self.cache_layers:
+            layer.reset()
 
 
 # =====================================================================
@@ -162,7 +222,8 @@ class RotaryProjection(Projection):
         assert self.proj_width % 2 == 0, f"proj_width must be even, got {self.proj_width}"
         self.register_buffer(
             "theta",
-            1.0 / torch.pow(
+            1.0
+            / torch.pow(
                 base,
                 torch.arange(0, self.proj_width, 2, dtype=torch.float) / self.proj_width,
             ),
@@ -216,9 +277,9 @@ class ExtrapolatableRotaryProjection(RotaryProjection):
         self.xpos_scale_base = xpos_scale_base
         self.xpos_scale_exponent = xpos_scale_exponent
 
-        xpos_base_scale = (
-            torch.arange(0, self.proj_width, 2).float() + 0.4 * self.proj_width
-        ) / (1.4 * self.proj_width)
+        xpos_base_scale = (torch.arange(0, self.proj_width, 2).float() + 0.4 * self.proj_width) / (
+            1.4 * self.proj_width
+        )
         self.register_buffer("xpos_base_scale", xpos_base_scale, persistent=False)
 
     def _get_xpos_scale(
@@ -226,11 +287,11 @@ class ExtrapolatableRotaryProjection(RotaryProjection):
         seq_ids: Int[torch.Tensor, "*shape heads seq"],
     ) -> Float[torch.Tensor, "*shape heads seq dim"]:
         max_pos = seq_ids.max()
-        center = torch.div(max_pos + 1, 2, rounding_mode='floor')
+        center = torch.div(max_pos + 1, 2, rounding_mode="floor")
         power = (seq_ids.float() - center) / self.xpos_scale_base
         scale = self.xpos_base_scale ** power.unsqueeze(-1)
         scale = repeat(scale, "... d -> ... (d 2)")
-        return scale ** self.xpos_scale_exponent
+        return scale**self.xpos_scale_exponent
 
     def forward(
         self,
@@ -329,10 +390,14 @@ class SelfAttention(nn.Module):
 
         if config.qk_norm:
             self.q_norm = uu.RMSNorm(
-                config.qk_dim, eps=config.norm_eps, include_weight=config.qk_norm_include_weight,
+                config.qk_dim,
+                eps=config.norm_eps,
+                include_weight=config.qk_norm_include_weight,
             )
             self.k_norm = uu.RMSNorm(
-                config.qk_dim, eps=config.norm_eps, include_weight=config.qk_norm_include_weight,
+                config.qk_dim,
+                eps=config.norm_eps,
+                include_weight=config.qk_norm_include_weight,
             )
         else:
             self.q_norm = None
@@ -340,14 +405,14 @@ class SelfAttention(nn.Module):
 
         self.in_proj = uu.Linear(
             config.d_model,
-            config.qk_dim * config.num_heads
-            + config.qk_dim * config.num_groups
-            + config.v_dim * config.num_groups,
+            config.qk_dim * config.num_heads + config.qk_dim * config.num_groups + config.v_dim * config.num_groups,
             bias=config.attn_bias,
         )
         self.qk_proj = qk_proj_layer(config.qk_dim) if qk_proj_layer is not None else None
         self.out_proj = uu.Linear(
-            config.v_dim * config.num_heads, config.d_model, bias=config.attn_bias,
+            config.v_dim * config.num_heads,
+            config.d_model,
+            bias=config.attn_bias,
         )
 
         self._split_sizes = [
@@ -377,13 +442,22 @@ class SelfAttention(nn.Module):
         if self._pds is not None:
             q = self._pds(q)
         if self.qk_proj is not None:
-            seq = seq_ids[..., -q.size(-2):] if seq_ids is not None else None
+            seq = seq_ids[..., -q.size(-2) :] if seq_ids is not None else None
             q, k = self.qk_proj(q, k, query_ids=seq, kv_ids=seq)
+
+        kv_cache_layer = kwargs.get("kv_cache_layer")
+        if kv_cache_layer is not None:
+            kv_read_len = kwargs["kv_read_len"]
+            kv_cache_layer(k, v)
+            k = kv_cache_layer.keys[:, :, :kv_read_len, :]
+            v = kv_cache_layer.values[:, :, :kv_read_len, :]
 
         attn_mask = kwargs.get("attn_mask")
         is_causal = not self.is_variate_layer if attn_mask is None else False
         out = F.scaled_dot_product_attention(
-            q, k, v,
+            q,
+            k,
+            v,
             attn_mask=attn_mask,
             dropout_p=0.0,
             is_causal=is_causal,
@@ -501,15 +575,19 @@ class SelfAttentionTransformerLayer(nn.Module):
         self.attn = attn
         self._layer_idx = layer_idx
         self.ffn = GatedLinearUnitFeedForwardNetwork(
-            in_dim=config.d_model, hidden_dim=config.d_ff,
-            out_dim=None, bias=config.mlp_bias, ffn_dropout_p=config.dropout_p,
+            in_dim=config.d_model,
+            hidden_dim=config.d_ff,
+            out_dim=None,
+            bias=config.mlp_bias,
+            ffn_dropout_p=config.dropout_p,
         )
         self.norm1 = uu.RMSNorm(config.d_model, eps=config.norm_eps, include_weight=config.norm_include_weight)
         self.norm2 = uu.RMSNorm(config.d_model, eps=config.norm_eps, include_weight=config.norm_include_weight)
 
         total_depth = 2 * num_layers
         tau_rule = uu.transformer_residual_scaling_rule(
-            residual_mult=residual_mult, residual_attn_ratio=residual_attn_ratio,
+            residual_mult=residual_mult,
+            residual_attn_ratio=residual_attn_ratio,
         )
         self.register_buffer("attn_tau", torch.tensor(tau_rule(2 * layer_idx, total_depth)))
         self.register_buffer("mlp_tau", torch.tensor(tau_rule(2 * layer_idx + 1, total_depth)))
@@ -549,13 +627,16 @@ class VariateTimeTransformerDecoder(nn.Module):
             key_proj_layer = ft.partial(ExtrapolatableRotaryProjection, xpos_scale_exponent=-1.0)
             qk_proj_layer = ft.partial(
                 QueryKeyProjection,
-                proj_layer=query_proj_layer, key_proj_layer=key_proj_layer,
-                kwargs={"max_len": 8192}, partial_factor=(0.0, 0.5),
+                proj_layer=query_proj_layer,
+                key_proj_layer=key_proj_layer,
+                kwargs={"max_len": 8192},
+                partial_factor=(0.0, 0.5),
             )
         else:
             qk_proj_layer = ft.partial(
                 QueryKeyProjection,
-                proj_layer=RotaryProjection, kwargs={"max_len": 8192},
+                proj_layer=RotaryProjection,
+                kwargs={"max_len": 8192},
                 partial_factor=(0.0, 0.5),
             )
 
@@ -570,8 +651,10 @@ class VariateTimeTransformerDecoder(nn.Module):
                         qk_proj_layer=qk_proj_layer if not variate_layer else None,
                         is_variate_layer=variate_layer,
                     ),
-                    layer_idx=idx, num_layers=config.num_layers,
-                    residual_mult=residual_mult, residual_attn_ratio=residual_attn_ratio,
+                    layer_idx=idx,
+                    num_layers=config.num_layers,
+                    residual_mult=residual_mult,
+                    residual_attn_ratio=residual_attn_ratio,
                 )
             )
 
@@ -591,32 +674,35 @@ class VariateTimeTransformerDecoder(nn.Module):
         state: Float[torch.Tensor, "*shape num_series q_len dim"],
         time_ids: Optional[Int[torch.Tensor, "*shape #num_series seq_len"]],
         group_ids: Optional[Int[torch.Tensor, "*shape #num_series #seq_len"]],
+        has_missing_values: bool = True,
     ) -> tuple[dict, dict]:
         q_len = state.shape[-2]
         kv_len = q_len
 
-        # Time attention mask (causal)
-        time_attn_mask = torch.where(
-            torch.tril(torch.ones(q_len, kv_len, dtype=bool, device=state.device), diagonal=kv_len - q_len),
-            torch.zeros(1, dtype=state.dtype, device=state.device),
-            torch.full((1,), -torch.inf, dtype=state.dtype, device=state.device),
-        )
-        if group_ids is not None and group_ids.shape[-1] > 1:
-            time_attn_mask = time_attn_mask + torch.where(
-                group_ids[..., -q_len:, None] == group_ids[..., None, :],
+        if has_missing_values:
+            # Time attention mask (causal)
+            time_attn_mask = torch.where(
+                torch.tril(torch.ones(q_len, kv_len, dtype=bool, device=state.device), diagonal=kv_len - q_len),
                 torch.zeros(1, dtype=state.dtype, device=state.device),
                 torch.full((1,), -torch.inf, dtype=state.dtype, device=state.device),
             )
-        elif time_ids is not None:
-            time_attn_mask = time_attn_mask + torch.where(
-                rearrange(time_ids == -1, "... kv_len -> ... 1 kv_len"),
-                torch.full((1,), -torch.inf, dtype=state.dtype, device=state.device),
-                torch.zeros(1, dtype=state.dtype, device=state.device),
-            )
-        time_attn_mask = rearrange(time_attn_mask, "... s1 s2 -> (...) 1 s1 s2").contiguous()
-        time_layer_kwargs = {"attn_mask": time_attn_mask}
+            if group_ids is not None and group_ids.shape[-1] > 1:
+                time_attn_mask = time_attn_mask + torch.where(
+                    group_ids[..., -q_len:, None] == group_ids[..., None, :],
+                    torch.zeros(1, dtype=state.dtype, device=state.device),
+                    torch.full((1,), -torch.inf, dtype=state.dtype, device=state.device),
+                )
+            elif time_ids is not None:
+                time_attn_mask = time_attn_mask + torch.where(
+                    rearrange(time_ids == -1, "... kv_len -> ... 1 kv_len"),
+                    torch.full((1,), -torch.inf, dtype=state.dtype, device=state.device),
+                    torch.zeros(1, dtype=state.dtype, device=state.device),
+                )
+            time_attn_mask = rearrange(time_attn_mask, "... s1 s2 -> (...) 1 s1 s2").contiguous()
+            time_layer_kwargs = {"attn_mask": time_attn_mask}
+        else:
+            time_layer_kwargs = {}
 
-        # Variate attention mask
         if group_ids is not None and group_ids.shape[-2] > 1:
             var_attn_mask = torch.where(
                 rearrange(group_ids[..., -q_len:], "... n s -> ... s 1 n 1")
@@ -636,12 +722,50 @@ class VariateTimeTransformerDecoder(nn.Module):
         state: Float[torch.Tensor, "*shape num_series q_len dim"],
         time_ids: Optional[Int[torch.Tensor, "*shape #num_series seq_len"]] = None,
         group_ids: Optional[Int[torch.Tensor, "*shape #num_series #seq_len"]] = None,
-        **kwargs,
+        kv_cache: Optional[KVCache] = None,
+        kv_read_len: Optional[int] = None,
+        has_missing_values: bool = True,
     ) -> Float[torch.Tensor, "*shape num_series q_len dim"]:
         if time_ids is None:
             time_ids = torch.arange(state.shape[-2], device=state.device, dtype=torch.int32)
 
-        time_layer_kwargs, var_layer_kwargs = self._sdpa_kwargs(state, time_ids, group_ids)
+        _time_layer_kwargs, var_layer_kwargs = self._sdpa_kwargs(
+            state, time_ids, group_ids, has_missing_values=has_missing_values,
+        )
+
+        if kv_cache is None:
+            time_layer_kwargs = _time_layer_kwargs
+        elif state.shape[-2] == kv_read_len:
+            # Prefill: full context, use standard masks.
+            # Record which positions have valid data (gid != -1) so that
+            # future decode steps can mask out fully-unobserved context
+            # patches, matching the training convention.
+            time_layer_kwargs = _time_layer_kwargs
+            flat_gids = group_ids.expand(state.shape[:-1]).reshape(-1, state.shape[-2])
+            self._cache_valid = torch.ones(
+                flat_gids.shape[0],
+                kv_cache.max_size,
+                dtype=torch.bool,
+                device=state.device,
+            )
+            self._cache_valid[:, : state.shape[-2]] = flat_gids != -1
+        else:
+            # Decode: causal mask against cached keys (includes current batch).
+            # Post-prefill positions are always valid (initialized to True).
+            q_len = state.shape[-2]
+            valid = self._cache_valid[:, :kv_read_len]
+            causal = torch.tril(
+                torch.ones(q_len, kv_read_len, dtype=torch.bool, device=state.device),
+                diagonal=kv_read_len - q_len,
+            )
+            time_layer_kwargs = {
+                "attn_mask": torch.where(
+                    causal[None, None, :, :] & valid[:, None, None, :],
+                    torch.zeros(1, dtype=state.dtype, device=state.device),
+                    torch.full((1,), -torch.inf, dtype=state.dtype, device=state.device),
+                )
+            }
+
         num_series, seq_len = state.shape[-3], state.shape[-2]
 
         if time_ids is not None and time_ids.dim() > 1:
@@ -652,17 +776,32 @@ class VariateTimeTransformerDecoder(nn.Module):
         leading = state.shape[:-2]
         state = rearrange(state, "... seq_len dim -> (...) seq_len dim")
 
+        time_layer_idx = 0
         for idx, layer in enumerate(self.layers):
             if self._if_variate_layer(idx):
                 state = rearrange(
-                    state, "(b n) s d -> (b s) n d", n=num_series,
+                    state,
+                    "(b n) s d -> (b s) n d",
+                    n=num_series,
                 )
                 state = layer(state, **var_layer_kwargs)
                 state = rearrange(
-                    state, "(b s) n d -> (b n) s d", s=seq_len,
+                    state,
+                    "(b s) n d -> (b n) s d",
+                    s=seq_len,
                 )
             else:
-                state = layer(state, seq_ids=flat_time_ids, **time_layer_kwargs)
+                cache_layer = kv_cache.cache_layers[time_layer_idx] if kv_cache is not None else None
+                state = layer(
+                    state,
+                    seq_ids=flat_time_ids,
+                    kv_cache_layer=cache_layer,
+                    kv_read_len=kv_read_len,
+                    **time_layer_kwargs,
+                )
+                if cache_layer is not None and kv_cache.ephemeral_len > 0:
+                    cache_layer._position.sub_(kv_cache.ephemeral_len)
+                time_layer_idx += 1
 
         state = state.unflatten(0, leading)
         return self.out_norm(state)
@@ -687,9 +826,7 @@ class FusedPatchedParamProjection(nn.Module):
         self.output_shape = (patch_size, *param_shapes)
         self.proj = get_proj_fn(embeds_dim, math.prod(self.output_shape))
 
-    def forward(
-        self, inputs: Float[torch.Tensor, "*batch_shape embed_dim"]
-    ) -> torch.Tensor:
+    def forward(self, inputs: Float[torch.Tensor, "*batch_shape embed_dim"]) -> torch.Tensor:
         return self.proj(inputs).unflatten(-1, self.output_shape)
 
 
@@ -705,9 +842,7 @@ class QuantileKnotsOutputHead(nn.Module):
         super().__init__()
         self.knots = knots
         self.param_projection = (
-            param_projection_factory(embeds_dim, (len(knots),))
-            if param_projection_factory is not None
-            else None
+            param_projection_factory(embeds_dim, (len(knots),)) if param_projection_factory is not None else None
         )
 
     def forward(
@@ -716,8 +851,6 @@ class QuantileKnotsOutputHead(nn.Module):
         q: None,
     ) -> Float[torch.Tensor, "q ..."]:
         return rearrange(self.param_projection(embeddings), "... q -> q ...")
-
-
 
 
 # =====================================================================
@@ -752,20 +885,30 @@ class Toto2Model(nn.Module, PyTorchModelHubMixin):
         super().__init__()
         self.config = config
         self.scaler = PatchedCausalStdScaler(
-            patch_size=config.patch_size, stabilize_with_global=False, online=False,
+            patch_size=config.patch_size,
+            stabilize_with_global=False,
+            online=False,
         )
         self.patch_proj = InputResidualMLP(
-            in_dim=2 * config.patch_size, hidden_dim=4 * config.d_model,
-            out_dim=config.d_model, dropout_p=config.dropout_p, bias=True,
+            in_dim=2 * config.patch_size,
+            hidden_dim=4 * config.d_model,
+            out_dim=config.d_model,
+            dropout_p=config.dropout_p,
+            bias=True,
         )
         self.transformer = VariateTimeTransformerDecoder(
-            config, residual_mult=config.residual_mult, residual_attn_ratio=config.residual_attn_ratio,
+            config,
+            residual_mult=config.residual_mult,
+            residual_attn_ratio=config.residual_attn_ratio,
         )
 
         def res_mlp_proj_fn(in_dim: int, out_dim: int) -> nn.Module:
             return OutputResidualMLP(
-                in_dim=in_dim, hidden_dim=4 * config.d_model,
-                out_dim=out_dim, dropout_p=config.dropout_p, bias=True,
+                in_dim=in_dim,
+                hidden_dim=4 * config.d_model,
+                out_dim=out_dim,
+                dropout_p=config.dropout_p,
+                bias=True,
             )
 
         self.output_head = QuantileKnotsOutputHead(
@@ -777,6 +920,14 @@ class Toto2Model(nn.Module, PyTorchModelHubMixin):
                 patch_size=config.patch_size * config.num_output_patches,
             ),
         )
+        self._kv_cache: Optional[KVCache] = None
+        self._kv_cache_key: Optional[tuple[int, int]] = None
+
+    @property
+    def num_time_layers(self) -> int:
+        c = self.config
+        time_per_group = c.layer_group_size - c.num_variate_layers_per_group
+        return (c.num_layers // c.layer_group_size) * time_per_group
 
     def forward(
         self,
@@ -794,7 +945,8 @@ class Toto2Model(nn.Module, PyTorchModelHubMixin):
                     rearrange(scaled_series, "... (seq patch) -> ... seq patch", patch=self.config.patch_size),
                     rearrange(
                         (~(target_mask & cpm_mask)).to(target.dtype),
-                        "... (seq patch) -> ... seq patch", patch=self.config.patch_size,
+                        "... (seq patch) -> ... seq patch",
+                        patch=self.config.patch_size,
                     ),
                 ],
                 dim=-1,
@@ -812,111 +964,255 @@ class Toto2Model(nn.Module, PyTorchModelHubMixin):
 
         if num_return_steps is not None:
             x = x[..., -num_return_steps:, :]
-            loc = loc[..., -num_return_steps * self.config.patch_size:]
-            scale = scale[..., -num_return_steps * self.config.patch_size:]
+            loc = loc[..., -num_return_steps * self.config.patch_size :]
+            scale = scale[..., -num_return_steps * self.config.patch_size :]
 
         quantiles = self.output_head(x, q=None)
         return Toto2ModelOutputs(quantiles, loc, scale)
 
-    @torch.no_grad()
-    def forecast(self, inputs, horizon, **kwargs):
-        num_patches = math.ceil(horizon / self.config.patch_size)
-        target = torch.cat(
+    def _embed_patches(self, data, mask, patch_size):
+        """Embed time series data into patches with mask."""
+        return self.patch_proj(
+            torch.cat(
+                [
+                    rearrange(data, "... (seq patch) -> ... seq patch", patch=patch_size),
+                    rearrange((~mask).to(data.dtype), "... (seq patch) -> ... seq patch", patch=patch_size),
+                ],
+                dim=-1,
+            )
+        )
+
+    @staticmethod
+    def _clamp_nonfinite(vals: torch.Tensor) -> torch.Tensor:
+        """Replace inf with max/min finite values."""
+        return torch.where(
+            vals == float("inf"),
+            torch.where(vals.isfinite(), vals, -float("inf")).amax(dim=-1, keepdim=True),
+            torch.where(
+                vals == -float("inf"),
+                torch.where(vals.isfinite(), vals, float("inf")).amin(dim=-1, keepdim=True),
+                vals,
+            ),
+        )
+
+    def _get_kv_cache(self, initial_patches, num_patches, batch_shape, device):
+        """Return a KV cache, reusing the existing one if shapes match."""
+        max_cache_size = initial_patches + 2 * num_patches
+        cache_key = (max_cache_size, batch_shape)
+        if self._kv_cache is not None and self._kv_cache_key == cache_key:
+            self._kv_cache.reset()
+        else:
+            self._kv_cache = KVCache(
+                self.num_time_layers,
+                max_size=max_cache_size,
+            ).to(device)
+            self._kv_cache_key = cache_key
+        return self._kv_cache
+
+    def _prepare_forecast_inputs(self, inputs, num_patches):
+        """Build aligned full-length tensors for forecasting.
+
+        Concatenates the observed context with zero-filled prediction
+        region for both the target and its mask, and appends any
+        known_dynamic covariates along the variate dimension.
+
+        The final patch of the context mask is forced to True.  Short
+        series whose tail was padded with unobserved positions would
+        otherwise be out of distribution, since training never
+        systematically leaves the end of context unobserved.  Block
+        decoding later flips prediction positions to True as predicted
+        medians are filled in.
+
+        Returns the full target (zeros in the prediction region), the
+        full mask, series_ids, and the number of target variates.
+        """
+        patch_size = self.config.patch_size
+        initial_len = inputs["target"].shape[-1]
+        pred_len = num_patches * patch_size
+        device = inputs["target"].device
+        dtype = inputs["target"].dtype
+        n_var = inputs["series_ids"].shape[-1]
+        series_ids = inputs["series_ids"]
+
+        full_target = torch.cat(
             [
                 inputs["target"],
-                torch.zeros(
-                    inputs["target"].shape[:-1] + ((num_patches - 1) * self.config.patch_size,),
-                    device=inputs["target"].device, dtype=inputs["target"].dtype,
-                ),
+                torch.zeros(inputs["target"].shape[:-1] + (pred_len,), device=device, dtype=dtype),
             ],
             dim=-1,
         )
-        target_mask = torch.cat(
+        full_mask = torch.cat(
             [
-                inputs["target_mask"][..., :-self.config.patch_size],
+                inputs["target_mask"][..., :-patch_size],
                 torch.ones(
-                    inputs["target_mask"].shape[:-1] + (num_patches * self.config.patch_size,),
-                    device=inputs["target_mask"].device, dtype=inputs["target_mask"].dtype,
+                    inputs["target_mask"].shape[:-1] + (patch_size,),
+                    device=device,
+                    dtype=torch.bool,
                 ),
-            ],
-            dim=-1,
-        )
-        series_ids = inputs["series_ids"]
-        cpm_mask = torch.cat(
-            [
-                torch.ones_like(inputs["target_mask"]),
                 torch.zeros(
-                    inputs["target_mask"].shape[:-1] + ((num_patches - 1) * self.config.patch_size,),
-                    device=inputs["target_mask"].device, dtype=inputs["target_mask"].dtype,
+                    inputs["target_mask"].shape[:-1] + (pred_len,),
+                    device=device,
+                    dtype=torch.bool,
                 ),
             ],
             dim=-1,
         )
-        n_var = series_ids.shape[-1]
 
         if "known_dynamic" in inputs:
-            required_padding = (
-                math.ceil(horizon / self.config.patch_size) * self.config.patch_size - horizon
-            )
-            known_dynamic = torch.cat(
-                [
-                    inputs["known_dynamic"][..., self.config.patch_size:],
-                    torch.zeros(
-                        inputs["known_dynamic"].shape[:-1] + (required_padding,),
-                        device=inputs["known_dynamic"].device, dtype=inputs["known_dynamic"].dtype,
-                    ),
-                ],
-                dim=-1,
-            )
-            known_dynamic_mask = torch.cat(
-                [
-                    inputs["known_dynamic_mask"][..., self.config.patch_size:],
-                    torch.zeros(
-                        inputs["known_dynamic_mask"].shape[:-1] + (required_padding,),
-                        device=inputs["known_dynamic_mask"].device, dtype=inputs["known_dynamic_mask"].dtype,
-                    ),
-                ],
-                dim=-1,
-            )
-            target = torch.cat([target, known_dynamic], dim=-2)
-            target_mask = torch.cat([target_mask, known_dynamic_mask], dim=-2)
+            kd_len = inputs["known_dynamic"].shape[-1]
+            right_pad = max(0, initial_len + pred_len - kd_len)
+            kd = F.pad(inputs["known_dynamic"], (0, right_pad))
+            kd_mask = F.pad(inputs["known_dynamic_mask"], (0, right_pad))
+            full_target = torch.cat([full_target, kd], dim=-2)
+            full_mask = torch.cat([full_mask, kd_mask], dim=-2)
             series_ids = torch.cat([series_ids, inputs["known_dynamic_series_ids"]], dim=-1)
-            cpm_mask = torch.cat([cpm_mask, torch.ones_like(known_dynamic_mask)], dim=-2)
 
-        quantiles, loc, scale = self.forward(
-            target, target_mask, cpm_mask=cpm_mask, series_ids=series_ids,
-            num_return_steps=num_patches,
-        )
+        return full_target, full_mask, series_ids, n_var
 
-        loc = repeat(
-            loc, "... (seq patch) -> ... seq (n patch)",
-            patch=self.config.patch_size, n=self.config.num_output_patches,
-        )
-        scale = repeat(
-            scale, "... (seq patch) -> ... seq (n patch)",
-            patch=self.config.patch_size, n=self.config.num_output_patches,
-        )
-        quantiles = quantiles.sinh() * scale + loc
-        quantiles = rearrange(
-            quantiles[..., ::self.config.num_output_patches, :],
-            "... seq patch -> ... (seq patch)",
-        )[..., :n_var, :horizon]
+    @torch.no_grad()
+    def forecast(self, inputs, horizon, **kwargs):
+        """Forecast with optional block decoding and KV cache.
 
-        def clamp_nonfinite(vals: torch.Tensor) -> torch.Tensor:
-            return torch.where(
-                vals == float("inf"),
-                torch.where(vals.isfinite(), vals, -float("inf")).amax(dim=-1, keepdim=True),
-                torch.where(
-                    vals == -float("inf"),
-                    torch.where(vals.isfinite(), vals, float("inf")).amin(dim=-1, keepdim=True),
-                    vals,
-                ),
+        The model is a next-patch predictor: the output at patch position
+        i predicts values for patch i+1.  To align the output with the
+        requested horizon, the loop extracts ``x_out[..., -(block+1):-1]``
+        so the last context (or last median-feedback) position serves as
+        the anchor that produces the first forecast patch in each block.
+
+        When decode_block_size is set and the horizon requires multiple
+        blocks, uses a KV cache to iteratively decode with median feedback
+        between blocks.  The causal scaler is re-run each iteration so
+        loc/scale updates as predicted medians are filled in.
+
+        """
+        decode_block_size = kwargs.pop("decode_block_size", 0) or 0
+        has_missing_values = kwargs.pop("has_missing_values", True)
+        patch_size = self.config.patch_size
+        num_patches = math.ceil(horizon / patch_size)
+        nop = self.config.num_output_patches
+        median_idx = self.output_head.knots.index(0.5)
+
+        if decode_block_size > 0:
+            assert decode_block_size % patch_size == 0, (
+                f"decode_block_size ({decode_block_size}) must be divisible by patch_size ({patch_size})"
+            )
+            block_size_patches = min(decode_block_size // patch_size, num_patches)
+        else:
+            block_size_patches = num_patches
+
+        initial_len = inputs["target"].shape[-1]
+        device = inputs["target"].device
+
+        full_target, full_mask, series_ids, n_var = (
+            self._prepare_forecast_inputs(inputs, num_patches)
+        )
+        initial_patches = math.ceil(initial_len / patch_size)
+
+        max_gids_len = max(initial_patches + num_patches, 2 * block_size_patches)
+        base_gids = repeat(
+            series_ids, "... n_var -> ... n_var seq", seq=max_gids_len,
+        ).clone()
+        ctx_patch_obs = reduce(
+            full_mask[..., :initial_len], "... (seq patch) -> ... seq", "sum", patch=patch_size,
+        )
+        base_gids[..., :initial_patches][ctx_patch_obs == 0] = -1
+        use_cache = block_size_patches < num_patches
+        kv_cache = None
+        all_time_ids = None
+        if use_cache:
+            kv_cache = self._get_kv_cache(
+                initial_patches, num_patches, full_target.shape[:-1], device,
+            )
+            all_time_ids = torch.arange(
+                initial_patches, initial_patches + 2 * num_patches, device=device,
             )
 
-        quantiles = clamp_nonfinite(quantiles)
-        quantiles = quantiles.sort(dim=0).values
+        n_quantiles = len(self.output_head.knots)
+        quantiles = torch.zeros(
+            n_quantiles, *full_target.shape[:-1], num_patches, patch_size,
+            device=device, dtype=full_target.dtype,
+        )
+        patches_predicted = 0
+        cache_len = 0
+        context_x = None
 
-        return quantiles
+        scaled_context = None
+        
+        while patches_predicted < num_patches:
+            block = min(block_size_patches, num_patches - patches_predicted)
+            pred_start = initial_len + patches_predicted * patch_size
+            pred_end = pred_start + block * patch_size
+
+            _, static_loc, static_scale = self.scaler(full_target, full_mask)
+            
+            if scaled_context is None:
+                raw_ctx = (full_target[..., :initial_len] - static_loc[..., :initial_len]) / static_scale[..., :initial_len]
+                scaled_context = torch.where(full_mask[..., :initial_len], raw_ctx, torch.zeros_like(raw_ctx)).asinh()
+                context_x = self._embed_patches(scaled_context, full_mask[..., :initial_len], patch_size)
+
+            raw_pred = (full_target[..., initial_len:pred_end] - static_loc[..., initial_len:pred_end]) / static_scale[..., initial_len:pred_end]
+            scaled_pred_region = torch.where(full_mask[..., initial_len:pred_end], raw_pred, torch.zeros_like(raw_pred)).asinh()
+
+            pred_offset = pred_start - initial_len
+            pred_x = self._embed_patches(
+                scaled_pred_region[..., pred_offset : pred_offset + block * patch_size],
+                full_mask[..., pred_start:pred_end],
+                patch_size,
+            )
+
+            if patches_predicted == 0:
+                combined_x = torch.cat([context_x, pred_x], dim=-2)
+                combined_gids = base_gids[..., : initial_patches + block]
+                time_ids = None
+            else:
+                prev_offset = (patches_predicted - block_size_patches) * patch_size
+                median_len = block_size_patches * patch_size
+                median_x = self._embed_patches(
+                    scaled_pred_region[..., prev_offset : prev_offset + median_len],
+                    torch.ones(scaled_pred_region[..., prev_offset : prev_offset + median_len].shape, dtype=torch.bool, device=device),
+                    patch_size,
+                )
+                combined_x = torch.cat([median_x, pred_x], dim=-2)
+                combined_gids = base_gids[..., : block_size_patches + block]
+                tid_start = patches_predicted - block_size_patches
+                time_ids = all_time_ids[tid_start : tid_start + block_size_patches + block]
+
+            if kv_cache is not None:
+                kv_cache.ephemeral_len = block
+                kv_read_len = cache_len + combined_x.shape[-2]
+            else:
+                kv_read_len = None
+
+            x_out = self.transformer(
+                combined_x, time_ids=time_ids, group_ids=combined_gids,
+                kv_cache=kv_cache, kv_read_len=kv_read_len,
+                has_missing_values=has_missing_values,
+            )
+            if kv_cache is not None:
+                cache_len += combined_x.shape[-2] - block
+
+            pred_out = x_out[..., -(block + 1) : -1, :]
+            block_q = self.output_head(pred_out, q=None)[..., ::nop, :]
+
+            loc = rearrange(static_loc[..., pred_start:pred_end], "... (s p) -> ... s p", p=patch_size)
+            scale = rearrange(static_scale[..., pred_start:pred_end], "... (s p) -> ... s p", p=patch_size)
+            block_q_real = block_q.sinh() * scale + loc
+            block_q_real = self._clamp_nonfinite(block_q_real)
+            block_q_real = block_q_real.sort(dim=0).values
+            quantiles[..., patches_predicted : patches_predicted + block, :] = block_q_real
+
+            patches_predicted += block
+
+            if patches_predicted < num_patches:
+                median_real = block_q_real[median_idx, ..., :n_var, :, :]
+                full_target[..., :n_var, pred_start:pred_end] = rearrange(
+                    median_real, "... s p -> ... (s p)",
+                )
+                full_mask[..., :n_var, pred_start:pred_end] = True
+
+        return rearrange(
+            quantiles, "... seq patch -> ... (seq patch)",
+        )[..., :n_var, :horizon]
 
     @classmethod
     def _from_pretrained(cls, *, model_id, map_location="cpu", strict=True, **kwargs):
@@ -931,9 +1227,7 @@ class Toto2Model(nn.Module, PyTorchModelHubMixin):
                 index = json.loads(index_file.read_text())
                 state_dict = {}
                 for shard_file in set(index["weight_map"].values()):
-                    state_dict.update(
-                        load_safetensors_file(str(model_dir / shard_file), device=str(map_location))
-                    )
+                    state_dict.update(load_safetensors_file(str(model_dir / shard_file), device=str(map_location)))
                 model.load_state_dict(state_dict, strict=strict)
             else:
                 load_torch_model(model, model_dir, strict=strict, map_location=map_location)
@@ -989,9 +1283,13 @@ class Toto2GluonTSModel(nn.Module):
                 "known_dynamic_series_ids": torch.zeros_like(feat_dynamic_real[..., 0], dtype=torch.long),
             }
 
-        quantiles = self.model.forecast(inputs, self.prediction_length)
+        quantiles = self.model.forecast(
+            inputs,
+            self.prediction_length,
+            decode_block_size=self.config.decode_block_size,
+        )
         outputs = rearrange(
-            quantiles[:, :, :past_target.shape[-2], :],
+            quantiles[:, :, : past_target.shape[-2], :],
             "q b var seq -> b var seq q",
         ).squeeze(1)
         return (outputs,), None, None
@@ -1006,17 +1304,23 @@ class Toto2GluonTSModel(nn.Module):
         if self.config.target_dim == 1:
             transform += ExpandDimArray(field="target", axis=0)
         transform += AddObservedValuesIndicator(
-            target_field="target", output_field="observed_target", dtype=bool,
+            target_field="target",
+            output_field="observed_target",
+            dtype=bool,
         )
         if self.config.feat_dynamic_real_dim > 0:
             transform += AsNumpyArray(field="feat_dynamic_real", expected_ndim=2, dtype=np.float32)
             transform += AddObservedValuesIndicator(
-                target_field="feat_dynamic_real", output_field="observed_feat_dynamic_real", dtype=bool,
+                target_field="feat_dynamic_real",
+                output_field="observed_feat_dynamic_real",
+                dtype=bool,
             )
         if self.config.past_feat_dynamic_real_dim > 0:
             transform += AsNumpyArray(field="past_feat_dynamic_real", expected_ndim=2, dtype=np.float32)
             transform += AddObservedValuesIndicator(
-                target_field="past_feat_dynamic_real", output_field="past_observed_feat_dynamic_real", dtype=bool,
+                target_field="past_feat_dynamic_real",
+                output_field="past_observed_feat_dynamic_real",
+                dtype=bool,
             )
         return transform
 
@@ -1024,8 +1328,7 @@ class Toto2GluonTSModel(nn.Module):
     def instance_splitter(self) -> InstanceSplitter:
         context_length = (
             self.config.context_length
-            - (math.ceil(self.prediction_length / self.model.config.patch_size) - 1)
-            * self.model.config.patch_size
+            - (math.ceil(self.prediction_length / self.model.config.patch_size) - 1) * self.model.config.patch_size
         )
         past_length = max(
             self.model.config.patch_size,
@@ -1034,15 +1337,16 @@ class Toto2GluonTSModel(nn.Module):
         return TFTInstanceSplitter(
             instance_sampler=TestSplitSampler(),
             past_length=past_length,
-            future_length=math.ceil(self.prediction_length / self.model.config.patch_size) * self.model.config.patch_size,
+            future_length=math.ceil(self.prediction_length / self.model.config.patch_size)
+            * self.model.config.patch_size,
             observed_value_field="observed_target",
             time_series_fields=(
-                ["feat_dynamic_real", "observed_feat_dynamic_real"]
-                if self.config.feat_dynamic_real_dim > 0 else []
+                ["feat_dynamic_real", "observed_feat_dynamic_real"] if self.config.feat_dynamic_real_dim > 0 else []
             ),
             past_time_series_fields=(
                 ["past_feat_dynamic_real", "past_observed_feat_dynamic_real"]
-                if self.config.past_feat_dynamic_real_dim > 0 else []
+                if self.config.past_feat_dynamic_real_dim > 0
+                else []
             ),
             output_NTC=False,
         )
@@ -1052,7 +1356,11 @@ class Toto2GluonTSModel(nn.Module):
         return (
             ["past_target", "past_observed_target", "past_is_pad"]
             + (["feat_dynamic_real", "observed_feat_dynamic_real"] if self.config.feat_dynamic_real_dim > 0 else [])
-            + (["past_feat_dynamic_real", "past_observed_feat_dynamic_real"] if self.config.past_feat_dynamic_real_dim > 0 else [])
+            + (
+                ["past_feat_dynamic_real", "past_observed_feat_dynamic_real"]
+                if self.config.past_feat_dynamic_real_dim > 0
+                else []
+            )
         )
 
     @property

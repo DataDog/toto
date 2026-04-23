@@ -57,6 +57,12 @@ Toto 2.0 is the latest generation, featuring a u-μP-scaled transformer with alt
 - **High-Dimensional Support**: Handle time series with a large number of variables efficiently.
 - **Decoder-Only Architecture**: Supports variable prediction horizons and context lengths.
 
+> **Inference tips for `forecast()`:**
+> - **`decode_block_size`** selects the decoding strategy:
+>   - `None` (single forward pass): faster, better for short-term accuracy. Used for all leaderboard results.
+>   - e.g. `768` (block decode): better long-term stability for horizons ≳1000. Default in the quick start and notebooks.
+> - **`has_missing_values=False`** (when your context has no gaps) enables Flash Attention kernels for a meaningful speedup. Leave as `True` (default) if `target_mask` contains any `False` entries.
+
 ### Model Weights
 | Checkpoint | Parameters |
 |---|---|
@@ -91,6 +97,8 @@ series_ids = torch.zeros(1, 1, dtype=torch.long, device="cuda")
 quantiles = model.forecast(
     {"target": target, "target_mask": target_mask, "series_ids": series_ids},
     horizon=96,
+    decode_block_size=768,
+    has_missing_values=False,
 )
 ```
 

@@ -13,19 +13,8 @@ tensors with DTensors).
 from typing import Any
 
 import torch
-
-
-try:
-    from dion.newton_schulz_triton import ns_line_1, ns_line_2
-except ImportError:
-    ns_line_1 = ns_line_2 = None
-
-from unit_scaling.optim import (
-    _get_fan_in as _get_fan_in_base,
-    lr_scale_for_depth,
-    scaled_parameters,
-)
-
+from unit_scaling.optim import _get_fan_in as _get_fan_in_base
+from unit_scaling.optim import lr_scale_for_depth, scaled_parameters
 
 # Cache for MuP metadata by parameter NAME (survives FSDP2 sharding).
 # This is critical for FSDP2 compatibility — data_ptr() changes after sharding.
@@ -118,120 +107,164 @@ def _lr_scale_func_muon(param: torch.Tensor) -> float:
     return lr_scale_for_depth(param)
 
 
-def create_dion2(
-    params,
-    *,
-    lr: float = 0.02,
-    fraction: float = 0.5,
-    ef_decay: float = 0.95,
-    betas: tuple[float, float] = (0.9, 0.95),
-    weight_decay: float = 0.0,
-    epsilon: float = 1e-7,
-    distributed_mesh=None,
-    independent_weight_decay: bool = True,
-    allow_non_unit_scaling_params: bool = False,
-):
-    """Factory that returns a Dion2 optimizer with u-MuP LR scaling.
+class Dion2:
+    """Dion2 optimizer with u-MuP LR scaling and FSDP2 support.
 
     Dion2 uses submatrix selection instead of power iteration (faster per-step).
+    This wraps the dion.Dion2 optimizer to apply per-parameter learning rate scaling
+    following the μP/u-μP parameterization.
+
     Reference: https://arxiv.org/abs/2512.16928
-    """
-    from dion import Dion2
 
-    params = scaled_parameters(
-        params,
-        _lr_scale_func_muon,
-        lr=lr,
-        weight_decay=weight_decay,
-        independent_weight_decay=independent_weight_decay,
-        allow_non_unit_scaling_params=allow_non_unit_scaling_params,
-    )
-
-    return Dion2(
-        params,
-        distributed_mesh=distributed_mesh,
-        lr=lr,
-        fraction=fraction,
-        ef_decay=ef_decay,
-        betas=betas,
-        weight_decay=weight_decay,
-        epsilon=epsilon,
-        adjust_lr="spectral_norm",
-        use_triton=True,
-    )
-
-
-def create_normuon(
-    params,
-    *,
-    lr: float = 0.02,
-    mu: float = 0.95,
-    muon_beta2: float = 0.95,
-    betas: tuple[float, float] = (0.9, 0.95),
-    weight_decay: float = 0.0,
-    epsilon: float = 1e-7,
-    distributed_mesh=None,
-    independent_weight_decay: bool = True,
-    allow_non_unit_scaling_params: bool = False,
-    nesterov: bool = True,
-    cautious_wd: bool = True,
-    use_polar_express: bool = False,
-):
-    """Factory that returns a NorMuon optimizer with u-MuP LR scaling.
-
-    Uses the optimized mega-batched NorMuon implementation for better performance.
-
-    NorMuon combines orthogonalization with neuron-wise adaptive learning rates.
-    Reference: https://arxiv.org/abs/2510.05491
+    Learning rate scaling (per u-MuP):
+    - All parameters: lr = base_lr × depth_scale (no 1/√fan_in for orthogonal optimizers)
+    - Spectral norm adjustment provides width transfer automatically
 
     Args:
-        nesterov: Use Nesterov momentum (recommended for sign gradients).
-        cautious_wd: Apply weight decay only where update and parameter signs
-                     align (recommended for sign gradients like pinball loss).
-        use_polar_express: If True, use Triton-accelerated Polar Express for
-                          orthogonalization instead of Newton-Schulz.
-                          Comparable speed with better numerical accuracy.
+        params: Model parameters or parameter groups
+        lr: Base learning rate (will be scaled per-parameter)
+        fraction: Fraction of submatrix to use for orthogonalization
+        ef_decay: Error feedback decay rate
+        betas: Tuple of (beta1, beta2) for adaptive updates
+        weight_decay: Weight decay coefficient
+        epsilon: Small value to avoid division by zero
+        distributed_mesh: DeviceMesh or ProcessGroup for distributed training
+        independent_weight_decay: If True, weight decay is independent of LR
+        allow_non_unit_scaling_params: If True, allows parameters without mup_type
+        adjust_lr: LR adjustment strategy ("spectral_norm", "rms_norm", or None).
+                  Default is "spectral_norm" for u-MuP width transfer.
+        use_triton: If True, use Triton-accelerated kernels. Default is True.
+
+    Example:
+        optimizer = Dion2(model.parameters(), lr=0.02, weight_decay=0.01)
     """
-    from dion import NorMuon
 
-    # Depth-only LR scaling; spectral norm adjustment handles width transfer.
-    # Adam params should be routed through a separate uu.AdamW, not passed here.
-    params = scaled_parameters(
+    def __new__(
+        cls,
         params,
-        _lr_scale_func_muon,
-        lr=lr,
-        weight_decay=weight_decay,
-        independent_weight_decay=independent_weight_decay,
-        allow_non_unit_scaling_params=allow_non_unit_scaling_params,
-    )
+        *,
+        lr: float = 0.02,
+        fraction: float = 0.5,
+        ef_decay: float = 0.95,
+        betas: tuple[float, float] = (0.9, 0.95),
+        weight_decay: float = 0.0,
+        epsilon: float = 1e-7,
+        distributed_mesh=None,
+        independent_weight_decay: bool = True,
+        allow_non_unit_scaling_params: bool = False,
+        adjust_lr: str | None = "spectral_norm",
+        use_triton: bool = True,
+    ):
+        from dion import Dion2 as _Dion2
 
-    # Select orthogonalization function
-    newton_schulz_func = None
-    use_triton = False
+        params = scaled_parameters(
+            params,
+            _lr_scale_func_muon,
+            lr=lr,
+            weight_decay=weight_decay,
+            independent_weight_decay=independent_weight_decay,
+            allow_non_unit_scaling_params=allow_non_unit_scaling_params,
+        )
 
-    if use_polar_express:
-        # Use Triton-accelerated Polar Express orthogonalization
-        newton_schulz_func = polar_express_triton
-        use_triton = False  # We're providing custom func, don't use default Triton
-    else:
-        # Use default Newton-Schulz with Triton
-        use_triton = True
+        return _Dion2(
+            params,
+            distributed_mesh=distributed_mesh,
+            lr=lr,
+            fraction=fraction,
+            ef_decay=ef_decay,
+            betas=betas,
+            weight_decay=weight_decay,
+            epsilon=epsilon,
+            adjust_lr=adjust_lr,
+            use_triton=use_triton,
+        )
 
-    return NorMuon(
+
+class NorMuon:
+    """NorMuon optimizer with u-MuP LR scaling and FSDP2 support.
+
+    NorMuon combines orthogonalization with neuron-wise adaptive learning rates.
+    This wraps the dion.NorMuon optimizer to apply per-parameter learning rate scaling
+    following the μP/u-μP parameterization.
+
+    Reference: https://arxiv.org/abs/2510.05491
+
+    Learning rate scaling (per u-MuP):
+    - All parameters: lr = base_lr × depth_scale (no 1/√fan_in for orthogonal optimizers)
+    - Spectral norm adjustment provides width transfer automatically
+
+    Args:
+        params: Model parameters or parameter groups
+        lr: Base learning rate (will be scaled per-parameter)
+        mu: Momentum factor for NorMuon algorithm
+        muon_beta2: Second beta parameter for NorMuon's adaptive updates
+        betas: Tuple of (beta1, beta2) for AdamW and Lion algorithms
+        weight_decay: Weight decay coefficient
+        epsilon: Small value to avoid division by zero
+        distributed_mesh: DeviceMesh or ProcessGroup for distributed training
+        independent_weight_decay: If True, weight decay is independent of LR
+        allow_non_unit_scaling_params: If True, allows parameters without mup_type
+        nesterov: Use Nesterov momentum (recommended for sign gradients)
+        cautious_wd: Apply weight decay only where update and parameter signs align
+                    (recommended for sign gradients like pinball loss)
+        adjust_lr: LR adjustment strategy ("spectral_norm", "rms_norm", or None).
+                  Default is "spectral_norm" for u-MuP width transfer.
+        use_polar_express: If True, use Polar Express orthogonalization instead
+                          of Newton-Schulz. Default is True (enabled upstream)
+        use_triton: If True, use Triton-accelerated kernels for orthogonalization.
+                   Default is True for better performance
+
+    Example:
+        optimizer = NorMuon(model.parameters(), lr=0.02, weight_decay=0.01)
+    """
+
+    def __new__(
+        cls,
         params,
-        distributed_mesh=distributed_mesh,
-        lr=lr,
-        mu=mu,
-        muon_beta2=muon_beta2,
-        betas=betas,
-        weight_decay=weight_decay,
-        epsilon=epsilon,
-        nesterov=nesterov,
-        cautious_wd=cautious_wd,
-        adjust_lr="spectral_norm",
-        use_triton=use_triton,
-        newton_schulz_func=newton_schulz_func,
-    )
+        *,
+        lr: float = 0.02,
+        mu: float = 0.95,
+        muon_beta2: float = 0.95,
+        betas: tuple[float, float] = (0.9, 0.95),
+        weight_decay: float = 0.0,
+        epsilon: float = 1e-7,
+        distributed_mesh=None,
+        independent_weight_decay: bool = True,
+        allow_non_unit_scaling_params: bool = False,
+        nesterov: bool = True,
+        cautious_wd: bool = True,
+        adjust_lr: str | None = "spectral_norm",
+        use_polar_express: bool = True,
+        use_triton: bool = True,
+    ):
+        from dion import NorMuon as _NorMuon
+
+        # Depth-only LR scaling; spectral norm adjustment handles width transfer.
+        # Adam params should be routed through a separate uu.AdamW, not passed here.
+        params = scaled_parameters(
+            params,
+            _lr_scale_func_muon,
+            lr=lr,
+            weight_decay=weight_decay,
+            independent_weight_decay=independent_weight_decay,
+            allow_non_unit_scaling_params=allow_non_unit_scaling_params,
+        )
+
+        return _NorMuon(
+            params,
+            distributed_mesh=distributed_mesh,
+            lr=lr,
+            mu=mu,
+            muon_beta2=muon_beta2,
+            betas=betas,
+            weight_decay=weight_decay,
+            epsilon=epsilon,
+            nesterov=nesterov,
+            cautious_wd=cautious_wd,
+            adjust_lr=adjust_lr,
+            use_triton=use_triton,
+            use_polar_express=use_polar_express,
+        )
 
 
 class AdamW(torch.optim.AdamW):
@@ -277,100 +310,3 @@ class AdamW(torch.optim.AdamW):
         )
         # No need to forward {lr, weight_decay}, as each group has these specified
         super().__init__(params, *args, **kwargs)
-
-
-# ── Polar Express orthogonalization ─────────────────────────────────────────
-# Alternative to Newton-Schulz for NorMuon optimizer with better numerical accuracy.
-# Reference: https://arxiv.org/abs/2505.16932
-# Used in: https://github.com/karpathy/nanochat
-
-# Polar Express coefficients (higher order polynomial approximation)
-_POLAR_EXPRESS_COEFFS = [
-    (8.156554524902461, -22.48329292557795, 15.878769915207462),
-    (4.042929935166739, -2.808917465908714, 0.5000178451051316),
-    (3.8916678022926607, -2.772484153217685, 0.5060648178503393),
-    (3.285753657755655, -2.3681294933425376, 0.46449024233003106),
-    (2.3465413258596377, -1.7097828382687081, 0.42323551169305323),
-]
-
-
-@torch.compile(dynamic=False, fullgraph=True)
-def polar_express_triton(G: torch.Tensor, epsilon: float = 1e-7) -> torch.Tensor:
-    """
-    Triton-accelerated Polar Express orthogonalization (5 iterations).
-
-    Uses the same symmetric matrix multiplication kernels as Newton-Schulz,
-    but with Polar Express coefficients for better accuracy.
-
-    Args:
-        G: Input matrix to orthogonalize, shape [..., M, N]
-        epsilon: Small value to avoid division by zero
-
-    Returns:
-        Orthogonalized matrix with same shape as G
-
-    Example:
-        from dion.normuon import NorMuon
-        optimizer = NorMuon(..., newton_schulz_func=polar_express_triton)
-    """
-    X = G.to(dtype=torch.bfloat16)
-    if G.size(-2) > G.size(-1):
-        X = X.mT
-
-    # Normalize to ensure spectral norm is at most 1
-    # Using 1.01 multiplier for slightly more aggressive normalization
-    X = X / (X.norm(dim=(-2, -1), keepdim=True) * 1.01 + epsilon)
-
-    # Allocate buffers for intermediate results
-    X = X.contiguous()
-    A = torch.empty((*X.shape[:-1], X.size(-2)), device=X.device, dtype=X.dtype)
-    B = torch.empty_like(A)
-    C = torch.empty_like(X)
-
-    # Select batched or non-batched matmul
-    line_3 = torch.baddbmm if X.ndim > 2 else torch.addmm
-
-    # Perform Polar Express iterations using Triton-accelerated kernels
-    for a, b, c in _POLAR_EXPRESS_COEFFS:
-        ns_line_1(X, out=A)  # A = X @ X.mT (symmetric, exploits symmetry in Triton)
-        ns_line_2(
-            A, alpha=c, beta=b, out=B
-        )  # B = b * A + c * A @ A (symmetric quadratic)
-        line_3(X, B, X, beta=a, out=C)  # C = a * X + B @ X (standard matmul)
-        X, C = C, X  # Swap references to avoid copies
-
-    if G.size(-2) > G.size(-1):
-        X = X.mT
-    return X
-
-
-@torch.compile(fullgraph=True)
-def polar_express(G: torch.Tensor, epsilon: float = 1e-7) -> torch.Tensor:
-    """
-    Reference Polar Express implementation without Triton (for comparison/fallback).
-
-    This is the pure PyTorch version that can run without Triton.
-    For production use, prefer polar_express_triton() which is 2-3x faster.
-
-    Args:
-        G: Input matrix to orthogonalize, shape [..., M, N]
-        epsilon: Small value to avoid division by zero
-
-    Returns:
-        Orthogonalized matrix with same shape as G
-    """
-    assert G.ndim >= 2
-    X = G.bfloat16()
-    if G.size(-2) > G.size(-1):
-        X = X.mT
-
-    X = X / (X.norm(dim=(-2, -1), keepdim=True) * 1.01 + epsilon)
-
-    for a, b, c in _POLAR_EXPRESS_COEFFS:
-        A = X @ X.mT
-        B = b * A + c * A @ A
-        X = a * X + B @ X  # X <- aX + bX^3 + cX^5
-
-    if G.size(-2) > G.size(-1):
-        X = X.mT
-    return X

@@ -48,10 +48,7 @@ class Toto2ModelConfig:
 
     def __post_init__(self):
         if self.dropout_p != 0.0:
-            raise ValueError(
-                "Non-zero dropout_p is a bad choice here: it causes long-term training "
-                "instability."
-            )
+            raise ValueError("Non-zero dropout_p is a bad choice here: it causes long-term training instability.")
         if self.d_ff is None:
             self.d_ff = (int(4 * self.d_model * 2 / 3) + 7) // 8 * 8
         if self.qk_norm_include_weight is None:
@@ -74,9 +71,7 @@ class Toto2ModelConfig:
         assert self.num_heads > 0 and self.d_model % self.num_heads == 0, (
             f"d_model ({self.d_model}) must be divisible by num_heads ({self.num_heads})"
         )
-        assert (self.num_heads % self.num_groups == 0) and (
-            self.num_heads >= self.num_groups
-        ), (
+        assert (self.num_heads % self.num_groups == 0) and (self.num_heads >= self.num_groups), (
             f"num_heads ({self.num_heads}) must be divisible by num_groups ({self.num_groups}) and greater than or equal to num_groups ({self.num_groups})"
         )
 
@@ -92,6 +87,5 @@ class Toto2GluonTSModelConfig:
     target_dim: int
     past_feat_dynamic_real_dim: int = 0
     feat_dynamic_real_dim: int = 0
-    quantiles: list[float] = field(
-        default_factory=lambda: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
-    )
+    decode_block_size: Optional[int] = None
+    quantiles: list[float] = field(default_factory=lambda: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9])

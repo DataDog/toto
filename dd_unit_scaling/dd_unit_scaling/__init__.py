@@ -14,7 +14,7 @@ Anything available in ``unit_scaling`` is available here. Our overrides:
 - ``linear``, ``rms_norm`` — world-size-aware
 - ``residual_split``, ``residual_add`` — use our compile-friendly scale ops
 - ``Linear``,  ``LinearReadout``, ``RMSNorm`` — world-size-aware nn.Module wrappers
-- ``AdamW`` — MuP-aware with FSDP2 metadata caching
+- ``AdamW``, ``NorMuon``, ``Dion2`` — MuP-aware optimizers with FSDP2 support
 """
 
 # --- Pull in everything from upstream unit_scaling ---
@@ -24,38 +24,38 @@ from unit_scaling.functional import *  # noqa: F401,F403
 
 # modules (world-size-aware)
 from ._modules import (  # noqa: F811
-    Linear as Linear,
-    LinearReadout as LinearReadout,
-    PerDimScale as PerDimScale,
-    RMSNorm as RMSNorm,
+    Linear,
+    LinearReadout,
+    PerDimScale,
+    RMSNorm,
 )
 
 # functional (world-size-aware + compile-friendly)
 from .functional import (  # noqa: F811
-    _get_effective_batch_multiplier as _get_effective_batch_multiplier,
-    GRAD_ACCUMULATION_STEPS as GRAD_ACCUMULATION_STEPS,
-    init_world_size_cache as init_world_size_cache,
-    linear as linear,
-    per_dim_scale as per_dim_scale,
-    residual_add as residual_add,
-    residual_split as residual_split,
-    rms_norm as rms_norm,
-    set_grad_accumulation_steps as set_grad_accumulation_steps,
-    silu_glu as silu_glu,
-    softplus as softplus,
+    GRAD_ACCUMULATION_STEPS,
+    _get_effective_batch_multiplier,
+    init_world_size_cache,
+    linear,
+    per_dim_scale,
+    residual_add,
+    residual_split,
+    rms_norm,
+    set_grad_accumulation_steps,
+    silu_glu,
+    softplus,
 )
 
 # optim (MuP + FSDP2)
 from .optim import (  # noqa: F811
-    AdamW as AdamW,
-    cache_fan_values as cache_fan_values,
-    create_dion2 as create_dion2,
-    create_normuon as create_normuon,
-    get_cached_metadata as get_cached_metadata,
-    polar_express as polar_express,
-    polar_express_triton as polar_express_triton,
+    AdamW,
+    Dion2,
+    NorMuon,
+    cache_fan_values,
+    get_cached_metadata,
 )
 
-# --- Override with our compile-friendly / world-size-aware versions ---
 # scale (compile-friendly)
-from .scale import scale_bwd as scale_bwd, scale_fwd as scale_fwd  # noqa: F811
+from .scale import (  # noqa: F811
+    scale_bwd,
+    scale_fwd,
+)
