@@ -7,7 +7,7 @@ To run evals for Toto, make sure you've followed the installation instructions i
 ## Models
 
 - [Toto (this repository)](https://github.com/DataDog/toto)
-- [Toto v2 (this repository)](https://github.com/DataDog/toto/tree/main/toto_v2)
+- [Toto 2.0 (this repository)](https://github.com/DataDog/toto/tree/main/toto2)
 - [Chronos](https://github.com/amazon-science/chronos-forecasting)
 - [Chronos-2](https://github.com/amazon-science/chronos-forecasting)
 - [Moirai](https://github.com/SalesforceAIResearch/uni2ts)

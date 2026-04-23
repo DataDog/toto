@@ -1,9 +1,9 @@
 # Unless explicitly stated otherwise all files in this repository are licensed under the Apache-2.0 License.
 #
 # This product includes software developed at Datadog (https://www.datadoghq.com/)
-# Copyright 2025 Datadog, Inc.
+# Copyright 2026 Datadog, Inc.
 
-"""TotoV2: Time series foundation model with MuP scaling.
+"""Toto 2.0: Time series foundation model with u-μP scaling.
 
 Standalone, inference-only implementation. All model components in a single file.
 """
@@ -17,10 +17,12 @@ import warnings
 from pathlib import Path
 from typing import Any, Callable, NamedTuple, NotRequired, Optional, TypedDict
 
+import dd_unit_scaling as uu
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from dd_unit_scaling import functional as U
 from einops import einsum, rearrange, reduce, repeat
 from gluonts.model.forecast_generator import QuantileForecastGenerator
 from gluonts.torch import PyTorchPredictor
@@ -28,23 +30,19 @@ from gluonts.transform import (
     AddObservedValuesIndicator,
     AsNumpyArray,
     ExpandDimArray,
-    Transformation,
     TestSplitSampler,
+    Transformation,
 )
 from gluonts.transform.split import InstanceSplitter, TFTInstanceSplitter
-from huggingface_hub import load_torch_model, PyTorchModelHubMixin
+from huggingface_hub import PyTorchModelHubMixin, load_torch_model
 from jaxtyping import Bool, Float, Int
 from safetensors.torch import load_file as load_safetensors_file
 
-import dd_unit_scaling as uu
-from dd_unit_scaling import functional as U
-
-from .configuration import TotoV2GluonTSModelConfig, TotoV2ModelConfig
-
+from .configuration import Toto2GluonTSModelConfig, Toto2ModelConfig
 
 __all__ = [
-    "TotoV2Model",
-    "TotoV2GluonTSModel",
+    "Toto2Model",
+    "Toto2GluonTSModel",
 ]
 
 
@@ -321,7 +319,7 @@ class SelfAttention(nn.Module):
 
     def __init__(
         self,
-        config: TotoV2ModelConfig,
+        config: Toto2ModelConfig,
         qk_proj_layer: Optional[Callable[[int], QueryKeyProjection]] = None,
         is_variate_layer: bool = False,
     ):
@@ -491,7 +489,7 @@ class SelfAttentionTransformerLayer(nn.Module):
 
     def __init__(
         self,
-        config: TotoV2ModelConfig,
+        config: Toto2ModelConfig,
         attn: SelfAttention,
         layer_idx: int = 0,
         num_layers: int = 1,
@@ -539,7 +537,7 @@ class VariateTimeTransformerDecoder(nn.Module):
 
     def __init__(
         self,
-        config: TotoV2ModelConfig,
+        config: Toto2ModelConfig,
         residual_mult: float = 1.0,
         residual_attn_ratio: float = 0.25,
     ):
@@ -723,24 +721,24 @@ class QuantileKnotsOutputHead(nn.Module):
 
 
 # =====================================================================
-# TotoV2 Model
+# Toto2 Model
 # =====================================================================
 
 
-class TotoV2ModelInputs(TypedDict):
+class Toto2ModelInputs(TypedDict):
     target: Float[torch.Tensor, "*batch n_var time"]
     target_mask: Bool[torch.Tensor, "*batch n_var time"]
     series_ids: Int[torch.Tensor, "*batch n_var"]
     num_return_steps: NotRequired[Optional[slice]]
 
 
-class TotoV2ModelOutputs(NamedTuple):
+class Toto2ModelOutputs(NamedTuple):
     quantiles: torch.Tensor
     loc: Float[torch.Tensor, "*batch n_var seq 1"]
     scale: Float[torch.Tensor, "*batch n_var seq 1"]
 
 
-class TotoV2ForecastInputs(TypedDict):
+class Toto2ForecastInputs(TypedDict):
     target: Float[torch.Tensor, "*batch n_var ctx"]
     target_mask: Bool[torch.Tensor, "*batch n_var ctx"]
     series_ids: Int[torch.Tensor, "*batch n_var"]
@@ -749,8 +747,8 @@ class TotoV2ForecastInputs(TypedDict):
     known_dynamic_series_ids: NotRequired[Int[torch.Tensor, "*batch n_exog"]]
 
 
-class TotoV2Model(nn.Module, PyTorchModelHubMixin):
-    def __init__(self, config: TotoV2ModelConfig):
+class Toto2Model(nn.Module, PyTorchModelHubMixin):
+    def __init__(self, config: Toto2ModelConfig):
         super().__init__()
         self.config = config
         self.scaler = PatchedCausalStdScaler(
@@ -787,7 +785,7 @@ class TotoV2Model(nn.Module, PyTorchModelHubMixin):
         cpm_mask: Optional[Bool[torch.Tensor, "*batch n_var time"]],
         series_ids: Int[torch.Tensor, "*batch n_var"],
         num_return_steps: Optional[int] = None,
-    ) -> TotoV2ModelOutputs:
+    ) -> Toto2ModelOutputs:
         scaled_series, loc, scale = self.scaler(target, target_mask & cpm_mask)
         scaled_series = scaled_series.asinh()
         x = self.patch_proj(
@@ -818,7 +816,7 @@ class TotoV2Model(nn.Module, PyTorchModelHubMixin):
             scale = scale[..., -num_return_steps * self.config.patch_size:]
 
         quantiles = self.output_head(x, q=None)
-        return TotoV2ModelOutputs(quantiles, loc, scale)
+        return Toto2ModelOutputs(quantiles, loc, scale)
 
     @torch.no_grad()
     def forecast(self, inputs, horizon, **kwargs):
@@ -925,8 +923,8 @@ class TotoV2Model(nn.Module, PyTorchModelHubMixin):
         model_dir = Path(model_id)
         if model_dir.is_dir() and (model_dir / "config.json").exists():
             raw = json.loads((model_dir / "config.json").read_text())
-            known = {f.name for f in dataclasses.fields(TotoV2ModelConfig)}
-            model = cls(TotoV2ModelConfig(**{k: v for k, v in raw.items() if k in known}))
+            known = {f.name for f in dataclasses.fields(Toto2ModelConfig)}
+            model = cls(Toto2ModelConfig(**{k: v for k, v in raw.items() if k in known}))
 
             index_file = model_dir / "model.safetensors.index.json"
             if index_file.exists():
@@ -950,8 +948,8 @@ class TotoV2Model(nn.Module, PyTorchModelHubMixin):
 # =====================================================================
 
 
-class TotoV2GluonTSModel(nn.Module):
-    def __init__(self, model: TotoV2Model, config: TotoV2GluonTSModelConfig):
+class Toto2GluonTSModel(nn.Module):
+    def __init__(self, model: Toto2Model, config: Toto2GluonTSModelConfig):
         super().__init__()
         self.prediction_length = config.prediction_length
         self.model = model

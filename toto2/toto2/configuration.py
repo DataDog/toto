@@ -1,7 +1,7 @@
 # Unless explicitly stated otherwise all files in this repository are licensed under the Apache-2.0 License.
 #
 # This product includes software developed at Datadog (https://www.datadoghq.com/)
-# Copyright 2025 Datadog, Inc.
+# Copyright 2026 Datadog, Inc.
 
 import math
 from dataclasses import dataclass, field
@@ -9,7 +9,7 @@ from typing import Optional
 
 
 @dataclass
-class TotoV2ModelConfig:
+class Toto2ModelConfig:
     patch_size: int
     d_model: int
     num_heads: int
@@ -59,7 +59,7 @@ class TotoV2ModelConfig:
         if self.residual_attn_ratio is None:
             raise ValueError(
                 "residual_attn_ratio must be set explicitly. Use "
-                "TotoV2ModelConfig.compute_residual_attn_ratio(context_length, patch_size) "
+                "Toto2ModelConfig.compute_residual_attn_ratio(context_length, patch_size) "
                 "to compute it."
             )
         self.num_groups = self.num_groups or self.num_heads
@@ -86,7 +86,7 @@ class TotoV2ModelConfig:
 
 
 @dataclass
-class TotoV2GluonTSModelConfig:
+class Toto2GluonTSModelConfig:
     prediction_length: int
     context_length: int
     target_dim: int
