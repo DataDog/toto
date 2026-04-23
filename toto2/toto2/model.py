@@ -1287,6 +1287,7 @@ class Toto2GluonTSModel(nn.Module):
             inputs,
             self.prediction_length,
             decode_block_size=self.config.decode_block_size,
+            has_missing_values=self.config.has_missing_values,
         )
         outputs = rearrange(
             quantiles[:, :, : past_target.shape[-2], :],
