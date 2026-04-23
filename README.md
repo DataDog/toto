@@ -101,7 +101,7 @@ quantiles = model.forecast(
 
 ### Evaluation
 
-- [GIFT-Eval Notebook](https://github.com/SalesforceAIResearch/gift-eval/blob/main/notebooks/toto_v2.ipynb): Evaluate Toto 2.0 on the GIFT-Eval benchmark.
+- [GIFT-Eval Notebook](https://github.com/SalesforceAIResearch/gift-eval/blob/main/notebooks/toto_2_0.ipynb): Evaluate Toto 2.0 on the GIFT-Eval benchmark.
 - [BOOM Evaluation Notebook](boom/notebooks/toto.ipynb) and [BOOM README](boom/README.md): Evaluate Toto 2.0 on the BOOM benchmark.
 
 ### Requirements

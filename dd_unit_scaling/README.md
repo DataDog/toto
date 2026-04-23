@@ -6,7 +6,7 @@ A production-ready, thin wrapper around [graphcore-research/unit-scaling](https:
 
 ### Why u-μP?
 
-Toto v2 uses [u-μP](https://arxiv.org/abs/2407.17465) (Unit-Scaled Maximal Update Parameterization) rather than standard [μP](https://arxiv.org/abs/2203.03466). Standard μP requires running a base model to compute reference scales, then transferring those scales to the target model size. u-μP eliminates this — scaling factors are derived directly from layer fan-in/fan-out, so there is no base model metadata to manage. u-μP has also been [shown to converge better on decoder-only transformers](https://arxiv.org/abs/2407.17465).
+Toto 2.0 uses [u-μP](https://arxiv.org/abs/2407.17465) (Unit-Scaled Maximal Update Parameterization) rather than standard [μP](https://arxiv.org/abs/2203.03466). Standard μP requires running a base model to compute reference scales, then transferring those scales to the target model size. u-μP eliminates this — scaling factors are derived directly from layer fan-in/fan-out, so there is no base model metadata to manage. u-μP has also been [shown to converge better on decoder-only transformers](https://arxiv.org/abs/2407.17465).
 
 ### Why a thin wrapper?
 
@@ -125,9 +125,9 @@ If you use gradient accumulation, also set:
 uu.set_grad_accumulation_steps(accum_steps)  # defaults to 1
 ```
 
-## Design note: sequence-length-independent scaling in Toto v2
+## Design note: sequence-length-independent scaling in Toto 2.0
 
-This isn't a feature of `dd-unit-scaling` itself, but a design choice in Toto v2 worth calling out. Toto v2 uses unscaled `F.scaled_dot_product_attention` (PyTorch native SDPA) instead of unit-scaled SDPA, so no scale factors depend on sequence length — making the model compatible with KV-cache inference. The resulting attn/MLP variance imbalance is compensated via `residual_attn_ratio = sqrt(S / log(S))` (where `S = context_length / patch_size`), which adjusts the residual tau values so that attention branches get proportionally more weight. `residual_mult` is set to `0.75` (the `unit_scaling` default is `1.0`).
+This isn't a feature of `dd-unit-scaling` itself, but a design choice in Toto 2.0 worth calling out. Toto 2.0 uses unscaled `F.scaled_dot_product_attention` (PyTorch native SDPA) instead of unit-scaled SDPA, so no scale factors depend on sequence length — making the model compatible with KV-cache inference. The resulting attn/MLP variance imbalance is compensated via `residual_attn_ratio = sqrt(S / log(S))` (where `S = context_length / patch_size`), which adjusts the residual tau values so that attention branches get proportionally more weight. `residual_mult` is set to `0.75` (the `unit_scaling` default is `1.0`).
 
 ## Requirements
 

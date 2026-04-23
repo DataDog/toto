@@ -25,8 +25,8 @@ Our evaluation methodology is adapted from [Gift-Eval](https://github.com/Salesf
 ### Toto
 To set up the environment for Toto, follow the instructions in the [README](/README.md).
 
-### Toto v2
-To set up the environment for Toto v2, follow the Toto v2 installation instructions in the [README](/README.md). Register the resulting venv as the `toto2_eval_env` Jupyter kernel so the `toto2.ipynb` notebook binds to it.
+### Toto 2.0
+To set up the environment for Toto 2.0, follow the Toto 2.0 installation instructions in the [README](/README.md). Register the resulting venv as the `toto2_eval_env` Jupyter kernel so the `toto2.ipynb` notebook binds to it.
 
 Download the following environments to reproduce these notebooks:
 
