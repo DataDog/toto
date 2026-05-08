@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Compile-friendly, world-size-aware unit scaling"
 requires-python = ">=3.12"
 dependencies = [
-    "torch>=2.4.0",
+    "torch>=2.11.0",
     "unit-scaling>=0.2.0",
 ]
 
