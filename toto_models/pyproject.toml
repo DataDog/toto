@@ -6,6 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "toto-models"
 version = "1.0.0"
 description = "Umbrella package for Datadog Toto time series models"
+readme = "README.md"
 requires-python = ">=3.12"
 license = {text = "Apache-2.0"}
 authors = [{name = "DataDog, Inc."}]
