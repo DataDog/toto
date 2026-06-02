@@ -16,14 +16,6 @@ To also install Toto 1.0 (for fine-tuning or exogenous variable support, not yet
 pip install "toto-models[v1]"
 ```
 
-## What's included
-
-| Package | Version | Description |
-|---|---|---|
-| [`toto-2`](https://pypi.org/project/toto-2/) | ≥2.0.0 | Toto 2.0 model, forecaster, and GluonTS integration |
-| [`dd-unit-scaling`](https://pypi.org/project/dd-unit-scaling/) | (transitive) | Compile-friendly u-μP scaling used by Toto 2.0 |
-| [`toto-ts`](https://pypi.org/project/toto-ts/) | ≥0.2.0 | Toto 1.0 — optional, install with `[v1]` |
-
 ## Quick Start
 
 ```python
@@ -49,16 +41,6 @@ quantiles = model.forecast(
 ```
 
 For full documentation, see the [`toto-2` package](https://pypi.org/project/toto-2/) or the [GitHub repository](https://github.com/DataDog/toto).
-
-## Available Models
-
-| Checkpoint | Parameters |
-|---|---|
-| [Toto-2.0-4m](https://huggingface.co/Datadog/Toto-2.0-4m) | 4M |
-| [Toto-2.0-22m](https://huggingface.co/Datadog/Toto-2.0-22m) | 22M |
-| [Toto-2.0-313m](https://huggingface.co/Datadog/Toto-2.0-313m) | 313M |
-| [Toto-2.0-1B](https://huggingface.co/Datadog/Toto-2.0-1B) | 1B |
-| [Toto-2.0-2.5B](https://huggingface.co/Datadog/Toto-2.0-2.5B) | 2.5B |
 
 ## Citation
 
