@@ -9,7 +9,7 @@ description = "Compile-friendly, world-size-aware unit scaling"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "torch>=2.4.0",
+    "torch>=2.12.1",
     "unit-scaling>=0.2.0",
 ]
 
