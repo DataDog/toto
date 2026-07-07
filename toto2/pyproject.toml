@@ -13,7 +13,7 @@ authors = [
     {name = "DataDog, Inc."}
 ]
 dependencies = [
-    "torch>=2.4.0",
+    "torch>=2.12.1",
     "einops>=0.7.0",
     "numpy>=1.26.0",
     "gluonts[torch]>=0.16.0",
@@ -26,7 +26,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=8.0",
+    "pytest>=8.0.2",
     "ruff>=0.8.0",
     "mypy>=1.11",
 ]
