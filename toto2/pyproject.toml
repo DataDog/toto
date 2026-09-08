@@ -10,8 +10,9 @@ readme = "README.md"
 requires-python = ">=3.12"
 license = {text = "Apache-2.0"}
 authors = [
-    {name = "DataDog, Inc."}
+    {name = "DataDog, Inc.", email = "package@datadoghq.com"}
 ]
+keywords = ["time-series", "forecasting", "transformer", "foundation-model", "multivariate", "datadog"]
 dependencies = [
     "torch>=2.4.0",
     "einops>=0.7.0",
@@ -23,6 +24,12 @@ dependencies = [
     "dd-unit-scaling>=0.1.0",
     "matplotlib>=3.9.0",
 ]
+
+[project.urls]
+Homepage = "https://www.datadoghq.com"
+Repository = "https://github.com/DataDog/toto/tree/main/toto2"
+"Bug Tracker" = "https://github.com/DataDog/toto/issues"
+Changelog = "https://github.com/DataDog/toto/releases"
 
 [project.optional-dependencies]
 dev = [
