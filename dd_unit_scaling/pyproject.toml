@@ -12,7 +12,7 @@ license = {text = "Apache-2.0"}
 authors = [{name = "DataDog, Inc.", email = "package@datadoghq.com"}]
 keywords = ["unit-scaling", "distributed-training", "pytorch", "datadog"]
 dependencies = [
-    "torch>=2.4.0",
+    "torch>=2.13.0",
     "unit-scaling>=0.2.0",
 ]
 
