@@ -33,7 +33,7 @@ Changelog = "https://github.com/DataDog/toto/releases"
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=8.0.2",
+    "pytest>=8.4.2",
     "ruff>=0.8.0",
     "mypy>=1.11",
 ]
