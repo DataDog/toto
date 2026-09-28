@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
+requires = ["setuptools>=84.0.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,8 +8,11 @@ version = "0.1.1"
 description = "Compile-friendly, world-size-aware unit scaling"
 readme = "README.md"
 requires-python = ">=3.12"
+license = {text = "Apache-2.0"}
+authors = [{name = "DataDog, Inc.", email = "package@datadoghq.com"}]
+keywords = ["unit-scaling", "distributed-training", "pytorch", "datadog"]
 dependencies = [
-    "torch>=2.4.0",
+    "torch>=2.14.0",
     "unit-scaling>=0.2.0",
 ]
 
