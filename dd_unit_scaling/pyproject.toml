@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dd-unit-scaling"
-version = "0.1.0"
+version = "0.1.1"
 description = "Compile-friendly, world-size-aware unit scaling"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -14,17 +14,6 @@ keywords = ["unit-scaling", "distributed-training", "pytorch", "datadog"]
 dependencies = [
     "torch>=2.14.0",
     "unit-scaling>=0.2.0",
-]
-
-[project.urls]
-Homepage = "https://www.datadoghq.com"
-Repository = "https://github.com/DataDog/toto/tree/main/dd_unit_scaling"
-"Bug Tracker" = "https://github.com/DataDog/toto/issues"
-Changelog = "https://github.com/DataDog/toto/releases"
-
-[project.optional-dependencies]
-optim = [
-    "dion",
 ]
 
 [tool.setuptools.packages.find]
