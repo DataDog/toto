@@ -13,7 +13,6 @@ import dataclasses
 import functools as ft
 import json
 import math
-import warnings
 from pathlib import Path
 from typing import Any, Callable, NamedTuple, NotRequired, Optional, TypedDict
 
@@ -162,20 +161,19 @@ class PatchedCausalStdScaler(nn.Module):
         Float[torch.Tensor, "..."],
         Float[torch.Tensor, "..."],
     ]:
-        try:
-            hp = data.to(torch.float64)
-        except TypeError:
-            warnings.warn(
-                f"Float64 not supported on {data.device}, using float32 for scaler.",
-                RuntimeWarning,
-            )
-            hp = data.to(torch.float32)
-
         if mask is None:
             mask = torch.ones_like(data, dtype=torch.bool)
 
-        loc, scale = self._compute_loc_scale(hp, mask)
-        loc, scale = loc.to(data.dtype), scale.to(data.dtype)
+        try:
+            hp, hp_mask = data.to(torch.float64), mask
+        except TypeError:
+            # The device has no float64 (MPS). In float32 the cumulative sums drift over a long context until the
+            # running variance goes negative and the scale is NaN (a flat series at 1e7 is enough), so compute the
+            # statistics in float64 on the CPU.
+            hp, hp_mask = data.cpu().to(torch.float64), mask.cpu()
+
+        loc, scale = self._compute_loc_scale(hp, hp_mask)
+        loc, scale = loc.to(data.device, data.dtype), scale.to(data.device, data.dtype)
         return torch.where(mask, (data - loc) / scale, 0), loc, scale
 
     def _compute_loc_scale(self, data: torch.Tensor, mask: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
@@ -1503,7 +1501,10 @@ class Toto2GluonTSModel(nn.Module):
             prediction_net=self,
             batch_size=batch_size,
             prediction_length=self.prediction_length,
-            input_transform=self.input_transform + self.instance_splitter,
+            # TFTInstanceSplitter emits past_is_pad as float64, which cannot be batched onto MPS.
+            input_transform=self.input_transform
+            + self.instance_splitter
+            + AsNumpyArray(field="past_is_pad", expected_ndim=1, dtype=np.float32),
             forecast_generator=self.forecast_generator,
             device=device,
         )
