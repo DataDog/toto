@@ -17,6 +17,7 @@ To run evals for Toto, make sure you've followed the installation instructions i
 - [VisionTS](https://github.com/Keytoyze/VisionTS.git)
 - [Timer](https://github.com/thuml/Large-Time-Series-Model.git)
 - [Time-MoE](https://github.com/Time-MoE/Time-MoE.git)
+- [Simons](https://github.com/Abel-ai-lab/Simons)
 - [Auto-ARIMA, Auto-ETS, Auto-Theta, Seasonal Naive](https://github.com/SalesforceAIResearch/gift-eval) (included in the Gift-Eval repository)
 
 
