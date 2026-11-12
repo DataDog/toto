@@ -10,6 +10,10 @@ moirai_1.1_large,0.436
 moirai_1.1_small,0.442
 moirai_2_small,0.427
 seasonalnaive,1.0
+simons_178m,0.37
+simons_25m,0.378
+simons_297m,0.368
+simons_60m,0.377
 time_moe_200M,0.643
 time_moe_50M,0.649
 timer,0.639
